@@ -1,4 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { useGNSS } from '../../context/GNSSContext';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -226,16 +229,63 @@ export const HistoryScreen: React.FC = () => {
     setSelectionMode(false);
   };
 
+  const normalizeFileName = (input: string, ext: string) => {
+    const cleaned = input.trim().replace(/[<>:"/\\|?*]+/g, '_');
+    const safe = cleaned || `export_${new Date().toISOString().split('T')[0]}`;
+    return safe.toLowerCase().endsWith(`.${ext}`) ? safe : `${safe}.${ext}`;
+  };
+
+  const downloadOrShareFile = async (
+    fileName: string,
+    content: string,
+    mimeType: string,
+    successMessage: string
+  ) => {
+    if (Capacitor.isNativePlatform()) {
+      await Filesystem.writeFile({
+        path: fileName,
+        data: content,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Documents,
+        path: fileName,
+      });
+
+      await Share.share({
+        title: fileName,
+        text: `Exported file: ${fileName}`,
+        url: uri,
+        dialogTitle: 'Save or share exported file',
+      });
+
+      toast.success(successMessage);
+      return;
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(successMessage);
+  };
+
 
   // Logic: Custom file name prompt for Exporting Surveys
-  const handleExportSurveys = () => {
+  const handleExportSurveys = async () => {
     if (filteredSurveys.length === 0) {
       toast.error('No survey records found to export');
       return;
     }
     const defaultName = `surveys_${new Date().toISOString().split('T')[0]}`;
-    const fileName = window.prompt("Enter file name for survey export:", defaultName);
-    if (!fileName) return; // User cancelled
+    const inputName = window.prompt("Enter file name for survey export:", defaultName);
+    if (!inputName) return; // User cancelled
     
     const csvHeader = "ID,Timestamp,Event,Duration(s),TargetAcc(cm),FinalAcc(cm),Latitude,Longitude,Altitude,MeanX,MeanY,MeanZ,Message\n";
     const csvRows = filteredSurveys.map(s => {
@@ -243,15 +293,15 @@ export const HistoryScreen: React.FC = () => {
       const local = (s as any).localCoordinates || { meanX: 0, meanY: 0, meanZ: 0 };
       return `${s.id},${s.timestamp.toISOString()},${event.toUpperCase()},${s.duration},${s.targetAccuracy.toFixed(0)},${s.finalAccuracy.toFixed(2)},${s.coordinates.latitude},${s.coordinates.longitude},${s.coordinates.altitude},${local.meanX},${local.meanY},${local.meanZ},"${s.message || ''}"`;
     });
-    
-    const blob = new Blob([csvHeader + csvRows.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName.endsWith('.csv') ? fileName : `${fileName}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Survey export successful');
+
+    const fileName = normalizeFileName(inputName, 'csv');
+    const csvContent = csvHeader + csvRows.join('\n');
+
+    try {
+      await downloadOrShareFile(fileName, csvContent, 'text/csv', 'Survey export successful');
+    } catch (error) {
+      toast.error(`Survey export failed: ${String(error)}`);
+    }
   };
 
   const shareSurvey = (survey: typeof surveys[0]) => {
@@ -265,24 +315,23 @@ export const HistoryScreen: React.FC = () => {
   };
 
   // Logic: Custom file name prompt for Exporting Logs
-  const handleExportLogs = () => {
+  const handleExportLogs = async () => {
     if (filteredLogs.length === 0) {
       toast.error('No logs found to export');
       return;
     }
     const defaultName = `gnss_logs_${new Date().toISOString().split('T')[0]}`;
-    const fileName = window.prompt("Enter file name for logs export:", defaultName);
-    if (!fileName) return;
+    const inputName = window.prompt("Enter file name for logs export:", defaultName);
+    if (!inputName) return;
 
     const logContent = filteredLogs.map(log => `[${log.timestamp.toISOString()}] [${log.level.toUpperCase()}] ${log.message}`).join('\n');
-    const blob = new Blob([logContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName.endsWith('.txt') ? fileName : `${fileName}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Logs export successful');
+    const fileName = normalizeFileName(inputName, 'txt');
+
+    try {
+      await downloadOrShareFile(fileName, logContent, 'text/plain', 'Logs export successful');
+    } catch (error) {
+      toast.error(`Logs export failed: ${String(error)}`);
+    }
   };
 
   // Helper for Log Styling

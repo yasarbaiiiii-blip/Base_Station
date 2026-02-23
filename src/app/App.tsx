@@ -221,7 +221,7 @@ const AppContent: React.FC = () => {
 
       {/* ── Main Content Area ── */}
       {/* Note the mb-[80px] specifically for mobile so content isn't trapped under the bottom navbar */}
-      <main className="flex-1 overflow-y-auto md:ml-64 mt-[60px] mb-[80px] md:mt-0 md:mb-0 overflow-x-hidden">
+      <main className="flex-1 overflow-y-auto md:ml-64 mt-[calc(env(safe-area-inset-top,0px)+72px)] mb-[80px] md:mt-0 md:mb-0 overflow-x-hidden">
         <div 
           key={currentScreen} 
           className="animate-in fade-in slide-in-from-bottom-8 duration-500 ease-out h-full"
@@ -247,7 +247,6 @@ const App: React.FC = () => {
 };
 
 export default App;
-
 
 
 

@@ -74,7 +74,7 @@ export const ConnectionScreen: React.FC = () => {
   const techLabel = "text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em]";
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] transition-colors duration-700 flex flex-col items-center justify-start lg:justify-center p-4 md:p-6 lg:p-10 overflow-hidden">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] transition-colors duration-700 flex flex-col items-center justify-start lg:justify-center p-4 md:p-6 lg:p-10 pt-safe overflow-hidden">
       
       {/* ── MOBILE HEADER (Visible only on small screens) ── */}
       <div className="lg:hidden w-full flex items-center justify-between mb-6 px-2 animate-in fade-in slide-in-from-top-4">
@@ -82,8 +82,8 @@ export const ConnectionScreen: React.FC = () => {
           <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg">
             <Cpu className="size-4 text-white" />
           </div>
-          <h1 className="text-lg font-black tracking-tighter text-slate-900 dark:text-slate-50 uppercase">
-            GNSS <span className="text-blue-600 font-light">COMMAND</span>
+          <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50 uppercase">
+            GNSS <span className="text-blue-600 font-medium">BASE STATION</span>
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -99,7 +99,7 @@ export const ConnectionScreen: React.FC = () => {
             <Cpu className="size-5 text-white dark:text-slate-900" />
           </div>
           <div>
-            <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-slate-50 uppercase">GNSS <span className="text-blue-600 font-light">COMMAND</span></h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 uppercase">GNSS <span className="text-blue-600 font-medium">BASE STATION</span></h1>
             <p className="text-[10px] font-medium text-slate-500 uppercase tracking-[0.3em]">Hardware Handshake Terminal</p>
           </div>
         </div>
@@ -254,7 +254,23 @@ export const ConnectionScreen: React.FC = () => {
                     <div className="pt-6 space-y-4 animate-in fade-in slide-in-from-top-4">
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Handshake Key</Label>
-                        <Input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="h-12 bg-slate-50 dark:bg-slate-950 border-2 dark:border-slate-800 rounded-2xl px-6 font-mono text-sm font-bold shadow-inner" placeholder="ACCESS_TOKEN" />
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            className="h-12 bg-slate-50 dark:bg-slate-950 border-2 dark:border-slate-800 rounded-2xl px-6 pr-12 font-mono text-sm font-bold shadow-inner"
+                            placeholder="ACCESS_TOKEN"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(prev => !prev)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-2"
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                          </button>
+                        </div>
                       </div>
                       <Button onClick={() => handleConnect('wifi', selectedWiFiTarget)} className="w-full h-12 rounded-xl bg-blue-600 text-white font-bold uppercase text-[11px] tracking-[0.2em] shadow-lg active:scale-95">Initiate Link</Button>
                     </div>
