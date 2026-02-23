@@ -874,6 +874,9 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const wsRef = useRef<WebSocket | null>(null);
   const stoppingRef = useRef(false);
   const intentionalDisconnectRef = useRef(false);
+  const startPendingRef = useRef(false);
+  const startInitiatedAtRef = useRef(0);
+  const START_PENDING_GRACE_MS = 3500;
   
   const autoSurveyRunRef = useRef<boolean>(true);
 
@@ -1105,8 +1108,14 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
             meanZ: parseVal(data.survey?.mean_z_m ?? data.survey?.meanZ ?? data.survey?.ecef_z ?? data.survey?.z ?? pos.z ?? pos[2]) ?? prev.localCoordinates.meanZ,
             observations: data.survey?.observations ?? prev.localCoordinates.observations,
           };
+          const withinStartGrace =
+            startPendingRef.current &&
+            prev.isActive &&
+            !wsActive &&
+            (Date.now() - startInitiatedAtRef.current) < START_PENDING_GRACE_MS;
 
           if (wsActive && !prev.isActive) {
+            startPendingRef.current = false;
             return {
               ...prev,
               isActive: true,
@@ -1119,7 +1128,24 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           if (prev.isActive) {
+            if (wsActive) {
+              startPendingRef.current = false;
+            }
             const shouldUpdateAccuracy = wsAccuracy > 0 && wsAccuracy < 5000;
+            if (withinStartGrace) {
+              return {
+                ...prev,
+                satelliteCount: data.gnss?.num_satellites ?? prev.satelliteCount,
+                currentAccuracy: shouldUpdateAccuracy ? wsAccuracy : prev.currentAccuracy,
+                position: {
+                  latitude: data.gnss?.latitude ?? prev.position.latitude,
+                  longitude: data.gnss?.longitude ?? prev.position.longitude,
+                  altitude: data.gnss?.altitude_msl ?? prev.position.altitude,
+                  accuracy: data.gnss?.horizontal_accuracy ?? prev.position.accuracy,
+                },
+                localCoordinates: wsLocalCoords,
+              };
+            }
             return {
               ...prev,
               satelliteCount: data.gnss?.num_satellites ?? prev.satelliteCount,
@@ -1173,6 +1199,8 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const currentDuration = configuration.baseStation.surveyDuration;
       const currentAccuracy = configuration.baseStation.accuracyThreshold;
+      startPendingRef.current = true;
+      startInitiatedAtRef.current = Date.now();
 
       // Note: Removed the manual setSurveyHistory 'started' payload from here.
       // The Unified Watcher useEffect below will safely catch the transition to true and log it once.
@@ -1191,6 +1219,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await api.startSurvey(currentDuration, currentAccuracy / 100);
       addLog('info', 'Survey started successfully');
     } catch (error) {
+      startPendingRef.current = false;
       // Hardware failure to start (Log Error immediately)
       setSurveyHistory((prev) => [{
         id: `SRV-ERR-${Date.now().toString().slice(-6)}`,
@@ -1217,6 +1246,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       addLog('info', 'Stopping survey');
       stoppingRef.current = true;
+      startPendingRef.current = false;
       setSurvey((prev) => ({ ...prev, isActive: false, status: 'stopped' }));
 
       let stopAttempts = 0;
@@ -1267,6 +1297,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const disconnect = useCallback(() => {
     intentionalDisconnectRef.current = true;
     stoppingRef.current = false;
+    startPendingRef.current = false;
     setSurvey(prev => ({ ...prev, isActive: false, status: 'idle' }));
     setIsAutoFlowActive(false);
     wsRef.current?.close();
@@ -1396,6 +1427,12 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSurvey((prev) => {
             const pollAccuracy = (surveyStatus.accuracy_m ?? 0) * 100;
             const pollElapsed = surveyStatus.progress_seconds ?? prev.elapsedTime;
+            const pollActive = surveyStatus.active ?? prev.isActive;
+            const withinStartGrace =
+              startPendingRef.current &&
+              prev.isActive &&
+              !pollActive &&
+              (Date.now() - startInitiatedAtRef.current) < START_PENDING_GRACE_MS;
             
             const parseVal = (val: any) => val !== undefined && val !== null ? Number(val) : undefined;
             const pos = surveyStatus.position || surveyStatus.local_position || {};
@@ -1407,13 +1444,26 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
               observations: surveyStatus.observations ?? prev.localCoordinates.observations,
             };
 
+            if (pollActive) {
+              startPendingRef.current = false;
+            }
+
+            if (withinStartGrace) {
+              return {
+                ...prev,
+                elapsedTime: pollElapsed > 0 ? pollElapsed : prev.elapsedTime,
+                currentAccuracy: pollAccuracy > 0 ? pollAccuracy : prev.currentAccuracy,
+                localCoordinates: pollLocalCoords,
+              };
+            }
+
             return {
               ...prev,
               elapsedTime: pollElapsed > 0 ? pollElapsed : prev.elapsedTime,
               currentAccuracy: pollAccuracy > 0 ? pollAccuracy : prev.currentAccuracy,
-              isActive: surveyStatus.active ?? prev.isActive,
+              isActive: pollActive,
               localCoordinates: pollLocalCoords,
-              status: surveyStatus.active ? "in-progress" : (prev.isActive && !surveyStatus.active ? "completed" : prev.status)
+              status: pollActive ? "in-progress" : (prev.isActive && !pollActive ? "completed" : prev.status)
             };
           });
         }
@@ -1448,6 +1498,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Transition 2: TRUE ➔ FALSE (Survey has Finished, Errored, or was manually Stopped)
     if (prevIsActive.current === true && survey.isActive === false) {
+      startPendingRef.current = false;
       
       // ANTI-FLUTTER SAFEGUARD: Ignore brief false-positives from network lag
       if (survey.elapsedTime < 2 && survey.currentAccuracy === 0 && !stoppingRef.current) {
