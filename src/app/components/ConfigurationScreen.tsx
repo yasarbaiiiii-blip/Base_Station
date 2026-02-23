@@ -1973,7 +1973,7 @@ export const ConfigurationScreen: React.FC = () => {
                   <div className="space-y-3">
                     <Slider
                       id="survey-duration"
-                      min={30} max={600} step={10}
+                      min={0} max={600} step={10}
                       value={[config.baseStation.surveyDuration]}
                       onValueChange={([value]) => setConfig({ ...config, baseStation: { ...config.baseStation, surveyDuration: value } })}
                     />

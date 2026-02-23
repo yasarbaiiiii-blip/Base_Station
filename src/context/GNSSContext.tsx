@@ -1525,6 +1525,7 @@ import {
 import { api, WS_URL } from "../api/gnssApi";
 import { scanWifi, connectWifi } from "../native/wifi";
 import { uiLogger } from "../utils/uiLogger";
+import { toast } from "sonner"; 
 
 /* ================= CONTEXT TYPE ================= */
 
@@ -1551,6 +1552,8 @@ type GNSSContextType = {
   logs: LogEntry[];
   addLog: (level: 'error' | 'warning' | 'info', message: string) => void;
   clearLogs: () => void;
+  clearSurveyHistory: () => void; 
+  deleteSurveys: (ids: string[]) => void; // ⭐ NEW: Added for selectable delete
   exportHistoryCSV: () => Promise<void>;
   exportLogsCSV: () => Promise<void>;
   startNTRIP: (host: string, port: number, mountpoint: string, password: string, username?: string) => Promise<void>;
@@ -1732,7 +1735,18 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const addLog = useCallback((level: 'error' | 'warning' | 'info', message: string) => {
-    setLogs((prev) => [{ id: Date.now().toString(), timestamp: new Date(), level, message }, ...prev].slice(0, 500));
+    setLogs((prev) => [{ id: Date.now().toString() + Math.random(), timestamp: new Date(), level, message }, ...prev].slice(0, 500));
+  }, []);
+
+  const clearSurveyHistory = useCallback(() => {
+    setSurveyHistory([]);
+    toast.success("Survey history cleared");
+  }, []);
+
+  // ⭐ NEW: Allow deletion of specific records
+  const deleteSurveys = useCallback((ids: string[]) => {
+    setSurveyHistory(prev => prev.filter(s => !ids.includes(s.id)));
+    toast.success(`Deleted ${ids.length} record(s)`);
   }, []);
 
   /* ================= WEBSOCKET ================= */
@@ -1860,6 +1874,20 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentDuration = configuration.baseStation.surveyDuration;
       const currentAccuracy = configuration.baseStation.accuracyThreshold;
 
+      setSurveyHistory((prev) => [{
+        id: `SRV-START-${Date.now().toString().slice(-6)}`,
+        timestamp: new Date(),
+        duration: 0,
+        finalAccuracy: 0,
+        targetAccuracy: currentAccuracy,
+        accuracyAttempts: [],
+        coordinates: { latitude: 0, longitude: 0, altitude: 0, accuracy: 0 },
+        localCoordinates: { meanX: 0, meanY: 0, meanZ: 0, observations: 0 },
+        success: true,
+        eventType: 'started',
+        message: `Initialization sequence activated. Target: ${currentAccuracy}cm / ${currentDuration}s`
+      } as any, ...prev]);
+
       setSurvey((prev) => ({
         ...prev,
         isActive: true,
@@ -1874,6 +1902,20 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await api.startSurvey(currentDuration, currentAccuracy / 100);
       addLog('info', 'Survey started successfully');
     } catch (error) {
+      setSurveyHistory((prev) => [{
+        id: `SRV-ERR-${Date.now().toString().slice(-6)}`,
+        timestamp: new Date(),
+        duration: 0,
+        finalAccuracy: 0,
+        targetAccuracy: configuration.baseStation.accuracyThreshold,
+        accuracyAttempts: [],
+        coordinates: { latitude: 0, longitude: 0, altitude: 0, accuracy: 0 },
+        localCoordinates: { meanX: 0, meanY: 0, meanZ: 0, observations: 0 },
+        success: false,
+        eventType: 'error',
+        message: `Hardware failed to initiate survey: ${String(error)}`
+      } as any, ...prev]);
+
       addLog('error', `Survey start failed: ${String(error)}`);
       setSurvey((prev) => ({ ...prev, isActive: false, status: "failed" }));
       throw error;
@@ -1907,19 +1949,35 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      const historyEntry: SurveyHistoryEntry = {
-        id: `survey_${Date.now()}`,
+      setSurveyHistory((prev) => [{
+        id: `SRV-STOP-${Date.now().toString().slice(-6)}`,
         timestamp: new Date(),
         duration: survey.elapsedTime,
         finalAccuracy: survey.currentAccuracy,
         targetAccuracy: survey.targetAccuracy,
         accuracyAttempts: [],
         coordinates: survey.position,
-        success: survey.currentAccuracy <= survey.targetAccuracy,
-      };
-      setSurveyHistory((prev) => [historyEntry, ...prev]);
+        localCoordinates: survey.localCoordinates,
+        success: false,
+        eventType: 'stopped',
+        message: 'Survey manually halted by operator.'
+      } as any, ...prev]);
 
     } catch (error) {
+      setSurveyHistory((prev) => [{
+        id: `SRV-ERR-${Date.now().toString().slice(-6)}`,
+        timestamp: new Date(),
+        duration: survey.elapsedTime,
+        finalAccuracy: survey.currentAccuracy,
+        targetAccuracy: survey.targetAccuracy,
+        accuracyAttempts: [],
+        coordinates: survey.position,
+        localCoordinates: survey.localCoordinates,
+        success: false,
+        eventType: 'error',
+        message: `Stop execution error: ${String(error)}`
+      } as any, ...prev]);
+
       addLog('error', `Unexpected survey stop error: ${String(error)}`);
       setSurvey((prev) => ({ ...prev, isActive: false, status: 'stopped' }));
     } finally {
@@ -1927,7 +1985,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
         stoppingRef.current = false;
       }, 1000);
     }
-  }, [survey.elapsedTime, survey.targetAccuracy, survey.position, addLog]);
+  }, [survey.elapsedTime, survey.targetAccuracy, survey.currentAccuracy, survey.position, survey.localCoordinates, addLog]);
 
   /* ================= CONNECTION FUNCTIONS ================= */
   const connectToDevice = useCallback(async (type: "wifi" | "ble", identifier: string, password?: string) => {
@@ -2064,20 +2122,17 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /* ================= SURVEY STATUS POLL ================= */
   useEffect(() => {
-    // ⭐ Core Fix: Continously poll /api/v1/survey even when idle so we catch completed survey data!
     const pollInterval = setInterval(async () => {
       try {
         const surveyStatus = await api.getSurveyStatus();
         if (surveyStatus && !stoppingRef.current) {
           setSurvey((prev) => {
-            
             const pollAccuracy = (surveyStatus.accuracy_m ?? 0) * 100;
             const pollElapsed = surveyStatus.progress_seconds ?? prev.elapsedTime;
             
             const parseVal = (val: any) => val !== undefined && val !== null ? Number(val) : undefined;
             const pos = surveyStatus.position || surveyStatus.local_position || {};
             
-            // ⭐ Aggressively hunt for local coordinates in the REST API payload
             const pollLocalCoords = {
               meanX: parseVal(surveyStatus.mean_x_m ?? surveyStatus.meanX ?? surveyStatus.ecef_x ?? surveyStatus.x ?? pos.x ?? pos[0]) ?? prev.localCoordinates.meanX,
               meanY: parseVal(surveyStatus.mean_y_m ?? surveyStatus.meanY ?? surveyStatus.ecef_y ?? surveyStatus.y ?? pos.y ?? pos[1]) ?? prev.localCoordinates.meanY,
@@ -2098,10 +2153,35 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         console.warn("Survey status poll failed:", e);
       }
-    }, survey.isActive ? 2000 : 5000); // Poll fast if active, slower if idle
+    }, survey.isActive ? 2000 : 5000);
 
     return () => clearInterval(pollInterval);
-  }, [survey.isActive]); // Re-bind if isActive changes so interval speed updates
+  }, [survey.isActive]);
+
+  // Log Auto-Complete events
+  const prevIsActive = useRef(survey.isActive);
+  useEffect(() => {
+    if (prevIsActive.current === true && survey.isActive === false && !stoppingRef.current) {
+      const isSuccess = survey.currentAccuracy <= survey.targetAccuracy && survey.currentAccuracy > 0;
+      
+      setSurveyHistory((prev) => [{
+        id: `SRV-COMP-${Date.now().toString().slice(-6)}`,
+        timestamp: new Date(),
+        duration: survey.elapsedTime,
+        finalAccuracy: survey.currentAccuracy,
+        targetAccuracy: survey.targetAccuracy,
+        accuracyAttempts: [],
+        coordinates: { ...survey.position },
+        localCoordinates: { ...survey.localCoordinates },
+        success: isSuccess,
+        eventType: isSuccess ? 'completed' : 'error',
+        message: isSuccess ? 'Hardware reported successful convergence.' : 'Survey terminated without reaching target constraints.'
+      } as any, ...prev]);
+
+      addLog(isSuccess ? 'info' : 'warning', `Survey convergence complete. Accuracy: ${survey.currentAccuracy.toFixed(2)}cm`);
+    }
+    prevIsActive.current = survey.isActive;
+  }, [survey.isActive, survey.currentAccuracy, survey.targetAccuracy, survey.elapsedTime, survey.position, survey.localCoordinates, addLog]);
 
   /* ================= NTRIP STATUS POLL ================= */
   useEffect(() => {
@@ -2188,12 +2268,14 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logs,
       addLog,
       clearLogs,
+      clearSurveyHistory,
+      deleteSurveys, // ⭐ Exported new function
       exportHistoryCSV,
       exportLogsCSV,
       startNTRIP,
       stopNTRIP,
     }),
-    [connection, survey, isAutoFlowActive, gnssStatus, streams, configuration, settings, surveyHistory, logs, connectToDevice, disconnect, startSurvey, stopSurvey, toggleStream, updateConfiguration, updateSettings, scanWiFi, scanBLE, addLog, clearLogs, exportHistoryCSV, exportLogsCSV, startNTRIP, stopNTRIP]
+    [connection, survey, isAutoFlowActive, gnssStatus, streams, configuration, settings, surveyHistory, logs, connectToDevice, disconnect, startSurvey, stopSurvey, toggleStream, updateConfiguration, updateSettings, scanWiFi, scanBLE, addLog, clearLogs, clearSurveyHistory, deleteSurveys, exportHistoryCSV, exportLogsCSV, startNTRIP, stopNTRIP]
   );
 
   return (
