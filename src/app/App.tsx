@@ -13,9 +13,7 @@ import {
   Settings,
   History,
   FileText,
-  LogOut,
-  Menu,
-  X
+  LogOut
 } from 'lucide-react';
 
 type Screen = 'connection' | 'dashboard' | 'configuration' | 'history' | 'settings';
@@ -23,7 +21,6 @@ type Screen = 'connection' | 'dashboard' | 'configuration' | 'history' | 'settin
 const AppContent: React.FC = () => {
   const { connection, disconnect, settings, survey } = useGNSS();
   const [currentScreen, setCurrentScreen] = useState<Screen>('connection');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Apply theme on mount and when settings change
   useEffect(() => {
@@ -77,7 +74,6 @@ const AppContent: React.FC = () => {
   const handleScreenChange = (screen: Screen) => {
     uiLogger.log(`Maps to ${screen}`, 'App', { screen });
     setCurrentScreen(screen);
-    setMobileMenuOpen(false);
   };
 
   // Listen for reconfigure button click
@@ -89,11 +85,12 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('navigate-to-configuration', handleNavigation);
   }, []);
 
+  // Added shortLabel specifically for the expanding mobile bottom nav
   const navItems = [
-    { id: 'dashboard' as Screen, label: 'Dashboard', icon: Home },
-    { id: 'configuration' as Screen, label: 'Configuration', icon: Settings },
-    { id: 'history' as Screen, label: 'History', icon: History },
-    { id: 'settings' as Screen, label: 'Settings', icon: FileText },
+    { id: 'dashboard' as Screen, label: 'Dashboard', shortLabel: 'Home', icon: Home },
+    { id: 'configuration' as Screen, label: 'Configuration', shortLabel: 'Config', icon: Settings },
+    { id: 'history' as Screen, label: 'History', shortLabel: 'History', icon: History },
+    { id: 'settings' as Screen, label: 'Settings', shortLabel: 'Settings', icon: FileText },
   ];
 
   const renderScreen = () => {
@@ -128,7 +125,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 flex overflow-hidden transition-colors duration-300">
 
-      {/* ── Desktop Sidebar (fixed left) ── */}
+      {/* ── Desktop Sidebar (Fixed Left) ── */}
       <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-50">
         <div className="p-6">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 dark:from-blue-400 dark:to-cyan-300 bg-clip-text text-transparent">
@@ -146,7 +143,6 @@ const AppContent: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => handleScreenChange(item.id)}
-                // Added active:scale-95 for the click squish effect
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all active:scale-95 ${currentScreen === item.id
                   ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-semibold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200'
@@ -162,7 +158,6 @@ const AppContent: React.FC = () => {
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">
           <button
             onClick={handleDisconnect}
-            // Added active:scale-95 and the solid red styling
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium transition-all active:scale-95 shadow-sm"
           >
             <LogOut className="size-5" />
@@ -171,64 +166,62 @@ const AppContent: React.FC = () => {
         </div>
       </aside>
 
-      {/* ── Mobile Header (fixed top) ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-50">
-        <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="font-bold text-lg bg-gradient-to-r from-blue-600 to-cyan-500 dark:from-blue-400 dark:to-cyan-300 bg-clip-text text-transparent">
-            GNSS Base Station
-          </h1>
+      {/* ── Mobile Header (Fixed Top) ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-50 pt-safe">
+        <div className="flex items-center justify-between px-5 py-3">
+          <div>
+            <h1 className="font-bold text-lg bg-gradient-to-r from-blue-600 to-cyan-500 dark:from-blue-400 dark:to-cyan-300 bg-clip-text text-transparent">
+              GNSS Base Station
+            </h1>
+            <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+              Connected
+            </p>
+          </div>
+          
+          {/* Quick Disconnect Button for Mobile */}
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            // Added active:scale-90 for a snappy tap effect on mobile
-            className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-90"
+            onClick={handleDisconnect}
+            className="p-2.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-all active:scale-90"
+            aria-label="Disconnect"
           >
-            {mobileMenuOpen ? <X className="size-6" /> : <Menu className="size-6" />}
+            <LogOut className="size-5" />
           </button>
         </div>
-
-        {/* Mobile Menu Dropdown */}
-        {mobileMenuOpen && (
-          <div className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
-            <nav className="p-3 space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleScreenChange(item.id)}
-                    // Added active:scale-95
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all active:scale-95 ${currentScreen === item.id
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-semibold'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200'
-                      }`}
-                  >
-                    <Icon className="size-5" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-              <div className="pt-2 mt-2 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  onClick={handleDisconnect}
-                  // Added active:scale-95 and solid red styling
-                  className="w-full flex items-center gap-3 px-3 py-3 rounded-md bg-red-700 hover:bg-red-800 text-white font-medium transition-all active:scale-95 shadow-sm"
-                >
-                  <LogOut className="size-5" />
-                  <span>Disconnect</span>
-                </button>
-              </div>
-            </nav>
-          </div>
-        )}
       </div>
 
-{/* ── Main Content ── */}
-      {/* Desktop: offset by sidebar width; Mobile: offset by fixed header height */}
-      <main className="flex-1 overflow-y-auto md:ml-64 mt-[60px] md:mt-0 overflow-x-hidden">
-        {/* The key={currentScreen} is the magic trick here. 
-          It tells React to completely rebuild this div on every navbar click, 
-          which forces the smooth slide-in animation to play every time! 
-        */}
+      {/* ── Mobile Interactive Bottom Navbar ── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-[#020617]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-center justify-between px-3 py-2.5 gap-1">
+          {navItems.map((item) => {
+            const isActive = currentScreen === item.id;
+            const Icon = item.icon;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleScreenChange(item.id)}
+                // Flex-grow ratio drives the smooth elastic expansion animation
+                className={`relative flex items-center justify-center gap-2 px-3 py-3 rounded-2xl transition-all duration-500 ease-out active:scale-95 ${
+                  isActive 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20 flex-grow-[2]' 
+                    : 'bg-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 flex-grow-[1]'
+                }`}
+              >
+                <Icon className={`size-5 transition-transform duration-300 ${isActive ? 'scale-110' : 'scale-100'}`} />
+                {isActive && (
+                  <span className="text-sm font-semibold tracking-wide animate-in fade-in zoom-in-50 duration-300 whitespace-nowrap">
+                    {item.shortLabel}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* ── Main Content Area ── */}
+      {/* Note the mb-[80px] specifically for mobile so content isn't trapped under the bottom navbar */}
+      <main className="flex-1 overflow-y-auto md:ml-64 mt-[60px] mb-[80px] md:mt-0 md:mb-0 overflow-x-hidden">
         <div 
           key={currentScreen} 
           className="animate-in fade-in slide-in-from-bottom-8 duration-500 ease-out h-full"

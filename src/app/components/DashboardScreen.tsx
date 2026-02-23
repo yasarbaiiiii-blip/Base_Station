@@ -48,7 +48,7 @@ export const DashboardScreen: React.FC = () => {
                 Survey Status
               </TabsTrigger>
               
-              <TabsTrigger
+              {/* <TabsTrigger
                 value="gnss"
                 className="flex items-center gap-2.5 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all 
                            text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200
@@ -58,7 +58,7 @@ export const DashboardScreen: React.FC = () => {
               >
                 <Satellite className="w-4 h-4" />
                 GNSS Status
-              </TabsTrigger>
+              </TabsTrigger> */}
 
             </TabsList>
           </Tabs>
@@ -72,9 +72,9 @@ export const DashboardScreen: React.FC = () => {
               <SurveyStatus />
             </TabsContent>
 
-            <TabsContent value="gnss" className="m-0 focus-visible:outline-none animate-in fade-in zoom-in-[0.99] duration-300 ease-out">
+            {/* <TabsContent value="gnss" className="m-0 focus-visible:outline-none animate-in fade-in zoom-in-[0.99] duration-300 ease-out">
               <GNSSStatusTab />
-            </TabsContent>
+            </TabsContent> */}
 
           </Tabs>
         </div>
