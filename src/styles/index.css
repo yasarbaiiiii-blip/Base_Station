@@ -2,6 +2,14 @@
 @import './tailwind.css';
 @import './theme.css';
 
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 
 @keyframes cinematic-focus {
   0% { filter: blur(10px); transform: scale(1.03); opacity: 0; }

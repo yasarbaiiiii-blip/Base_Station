@@ -824,6 +824,7 @@ import {
 
 import { api, WS_URL } from "../api/gnssApi";
 import { scanWifi, connectWifi } from "../native/wifi";
+import { connectBle, scanBleDevices } from "../native/ble";
 import { uiLogger } from "../utils/uiLogger";
 import { toast } from "sonner"; 
 
@@ -1284,7 +1285,12 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /* ================= CONNECTION FUNCTIONS ================= */
   const connectToDevice = useCallback(async (type: "wifi" | "ble", identifier: string, password?: string) => {
     try {
-      if (type === "wifi") await connectWifi(identifier, password);
+      if (type === "wifi") {
+        await connectWifi(identifier, password);
+      } else {
+        await connectBle(identifier);
+      }
+
       connectWebSocket();
       setConnection(prev => ({ ...prev, isConnected: true, connectionType: type }));
       addLog('info', `Connected via ${type}`);
@@ -1327,7 +1333,9 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const scanBLE = useCallback(async () => {
     try {
-      addLog('info', 'BLE scan started');
+      const devices = await scanBleDevices();
+      setAvailableBLEDevices(devices);
+      addLog('info', `Found ${devices.length} BLE devices`);
     } catch (error) {
       addLog('error', `BLE scan failed: ${String(error)}`);
     }

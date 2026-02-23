@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from "@capacitor/core";
 import { useGNSS } from '../../context/GNSSContext';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
@@ -14,8 +15,10 @@ import { toast } from 'sonner';
 
 export const ConnectionScreen: React.FC = () => {
   const { availableWiFiNetworks, availableBLEDevices, connectToDevice, scanWiFi, scanBLE, logs } = useGNSS();
+  const isIOS = Capacitor.getPlatform() === 'ios';
   const [connectionMode, setConnectionMode] = useState<'wifi' | 'ble' | 'auto'>('auto');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('');
+  const [manualSSID, setManualSSID] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -30,6 +33,10 @@ export const ConnectionScreen: React.FC = () => {
   };
 
   const handleConnect = async (type: 'wifi' | 'ble', identifier: string) => {
+    if (!identifier) {
+      toast.error(type === 'wifi' ? 'SSID Required' : 'Device Required');
+      return;
+    }
     if (type === 'wifi' && !password && availableWiFiNetworks.find(n => n.ssid === identifier)?.secured) {
       toast.error('Auth Key Required');
       return;
@@ -58,6 +65,10 @@ export const ConnectionScreen: React.FC = () => {
     if (connectionMode === 'auto') return "Searching for GNSS hardware nodes.";
     return "Select a node to begin handshake.";
   };
+
+  const selectedWiFiTarget = isIOS
+    ? (selectedNetwork || manualSSID.trim())
+    : selectedNetwork;
 
   // Typography Constants
   const techLabel = "text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em]";
@@ -175,8 +186,8 @@ export const ConnectionScreen: React.FC = () => {
                       </div>
                    </div>
                    <Button 
-                    onClick={() => handleConnect('wifi', availableWiFiNetworks[0]?.ssid)} 
-                    disabled={isConnecting} 
+                    onClick={() => handleConnect('wifi', selectedWiFiTarget || availableWiFiNetworks[0]?.ssid || '')} 
+                    disabled={isConnecting || (!selectedWiFiTarget && availableWiFiNetworks.length === 0)} 
                     className="h-12 px-12 rounded-xl bg-slate-900 dark:bg-blue-600 text-white font-bold uppercase tracking-[0.2em] shadow-xl text-[11px] active:scale-95 transition-all"
                    >
                       {isConnecting ? 'Linking Node...' : 'Establish Bridge'}
@@ -187,11 +198,35 @@ export const ConnectionScreen: React.FC = () => {
               {/* STAGE: WIFI */}
               {connectionMode === 'wifi' && (
                 <div className="space-y-4 animate-in slide-in-from-right-8 duration-500">
+                  {isIOS && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 text-amber-800 px-4 py-3 text-xs font-medium dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      iOS blocks nearby Wi-Fi scan APIs. Enter SSID manually, then connect.
+                    </div>
+                  )}
+
+                  {isIOS && (
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">SSID</Label>
+                      <Input
+                        value={manualSSID}
+                        onChange={e => {
+                          setManualSSID(e.target.value);
+                          if (selectedNetwork) setSelectedNetwork('');
+                        }}
+                        className="h-12 bg-slate-50 dark:bg-slate-950 border-2 dark:border-slate-800 rounded-2xl px-6 font-mono text-sm font-bold shadow-inner"
+                        placeholder="Network name (manual)"
+                      />
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 gap-3">
                     {availableWiFiNetworks.map((n) => (
                       <div 
                         key={n.ssid} 
-                        onClick={() => setSelectedNetwork(n.ssid)} 
+                        onClick={() => {
+                          setSelectedNetwork(n.ssid);
+                          setManualSSID(n.ssid);
+                        }}
                         className={`p-5 rounded-3xl border transition-all duration-300 flex items-center justify-between ${
                           selectedNetwork === n.ssid 
                           ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-900/10 shadow-lg' 
@@ -215,13 +250,13 @@ export const ConnectionScreen: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  {selectedNetwork && (
+                  {selectedWiFiTarget && (
                     <div className="pt-6 space-y-4 animate-in fade-in slide-in-from-top-4">
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Handshake Key</Label>
                         <Input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="h-12 bg-slate-50 dark:bg-slate-950 border-2 dark:border-slate-800 rounded-2xl px-6 font-mono text-sm font-bold shadow-inner" placeholder="ACCESS_TOKEN" />
                       </div>
-                      <Button onClick={() => handleConnect('wifi', selectedNetwork)} className="w-full h-12 rounded-xl bg-blue-600 text-white font-bold uppercase text-[11px] tracking-[0.2em] shadow-lg active:scale-95">Initiate Link</Button>
+                      <Button onClick={() => handleConnect('wifi', selectedWiFiTarget)} className="w-full h-12 rounded-xl bg-blue-600 text-white font-bold uppercase text-[11px] tracking-[0.2em] shadow-lg active:scale-95">Initiate Link</Button>
                     </div>
                   )}
                 </div>
@@ -230,8 +265,13 @@ export const ConnectionScreen: React.FC = () => {
               {/* STAGE: BLE */}
               {connectionMode === 'ble' && (
                 <div className="space-y-3 animate-in slide-in-from-right-8 duration-500">
+                  {availableBLEDevices.length === 0 && (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                      No BLE devices yet. Tap scan to discover nearby receivers.
+                    </div>
+                  )}
                   {availableBLEDevices.map((d) => (
-                    <div key={d.id} onClick={() => handleConnect('ble', d.name)} className="flex items-center justify-between p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 hover:border-blue-500 transition-all cursor-pointer active:scale-95">
+                    <div key={d.id} onClick={() => handleConnect('ble', d.id)} className="flex items-center justify-between p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 hover:border-blue-500 transition-all cursor-pointer active:scale-95">
                       <div className="flex items-center gap-5">
                         <div className="p-3.5 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/10"><Bluetooth size={20} /></div>
                         <div>
