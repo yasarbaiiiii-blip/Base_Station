@@ -24,6 +24,7 @@
 
 // import { api, WS_URL } from "../api/gnssApi";
 // import { scanWifi, connectWifi } from "../native/wifi";
+// import { connectBle, scanBleDevices } from "../native/ble";
 // import { uiLogger } from "../utils/uiLogger";
 // import { toast } from "sonner"; 
 
@@ -53,7 +54,7 @@
 //   addLog: (level: 'error' | 'warning' | 'info', message: string) => void;
 //   clearLogs: () => void;
 //   clearSurveyHistory: () => void; 
-//   deleteSurveys: (ids: string[]) => void; // ⭐ NEW: Added for selectable delete
+//   deleteSurveys: (ids: string[]) => void;
 //   exportHistoryCSV: () => Promise<void>;
 //   exportLogsCSV: () => Promise<void>;
 //   startNTRIP: (host: string, port: number, mountpoint: string, password: string, username?: string) => Promise<void>;
@@ -74,6 +75,9 @@
 //   const wsRef = useRef<WebSocket | null>(null);
 //   const stoppingRef = useRef(false);
 //   const intentionalDisconnectRef = useRef(false);
+//   const startPendingRef = useRef(false);
+//   const startInitiatedAtRef = useRef(0);
+//   const START_PENDING_GRACE_MS = 3500;
   
 //   const autoSurveyRunRef = useRef<boolean>(true);
 
@@ -243,7 +247,7 @@
 //     toast.success("Survey history cleared");
 //   }, []);
 
-//   // ⭐ NEW: Allow deletion of specific records
+//   // Allow deletion of specific records
 //   const deleteSurveys = useCallback((ids: string[]) => {
 //     setSurveyHistory(prev => prev.filter(s => !ids.includes(s.id)));
 //     toast.success(`Deleted ${ids.length} record(s)`);
@@ -305,8 +309,14 @@
 //             meanZ: parseVal(data.survey?.mean_z_m ?? data.survey?.meanZ ?? data.survey?.ecef_z ?? data.survey?.z ?? pos.z ?? pos[2]) ?? prev.localCoordinates.meanZ,
 //             observations: data.survey?.observations ?? prev.localCoordinates.observations,
 //           };
+//           const withinStartGrace =
+//             startPendingRef.current &&
+//             prev.isActive &&
+//             !wsActive &&
+//             (Date.now() - startInitiatedAtRef.current) < START_PENDING_GRACE_MS;
 
 //           if (wsActive && !prev.isActive) {
+//             startPendingRef.current = false;
 //             return {
 //               ...prev,
 //               isActive: true,
@@ -319,7 +329,24 @@
 //           }
 
 //           if (prev.isActive) {
+//             if (wsActive) {
+//               startPendingRef.current = false;
+//             }
 //             const shouldUpdateAccuracy = wsAccuracy > 0 && wsAccuracy < 5000;
+//             if (withinStartGrace) {
+//               return {
+//                 ...prev,
+//                 satelliteCount: data.gnss?.num_satellites ?? prev.satelliteCount,
+//                 currentAccuracy: shouldUpdateAccuracy ? wsAccuracy : prev.currentAccuracy,
+//                 position: {
+//                   latitude: data.gnss?.latitude ?? prev.position.latitude,
+//                   longitude: data.gnss?.longitude ?? prev.position.longitude,
+//                   altitude: data.gnss?.altitude_msl ?? prev.position.altitude,
+//                   accuracy: data.gnss?.horizontal_accuracy ?? prev.position.accuracy,
+//                 },
+//                 localCoordinates: wsLocalCoords,
+//               };
+//             }
 //             return {
 //               ...prev,
 //               satelliteCount: data.gnss?.num_satellites ?? prev.satelliteCount,
@@ -332,7 +359,7 @@
 //               },
 //               localCoordinates: wsLocalCoords,
 //               isActive: wsActive,
-//               status: !wsActive ? 'stopped' : prev.status,
+//               status: !wsActive ? 'completed' : prev.status,
 //             };
 //           }
 
@@ -373,20 +400,11 @@
 //     try {
 //       const currentDuration = configuration.baseStation.surveyDuration;
 //       const currentAccuracy = configuration.baseStation.accuracyThreshold;
+//       startPendingRef.current = true;
+//       startInitiatedAtRef.current = Date.now();
 
-//       setSurveyHistory((prev) => [{
-//         id: `SRV-START-${Date.now().toString().slice(-6)}`,
-//         timestamp: new Date(),
-//         duration: 0,
-//         finalAccuracy: 0,
-//         targetAccuracy: currentAccuracy,
-//         accuracyAttempts: [],
-//         coordinates: { latitude: 0, longitude: 0, altitude: 0, accuracy: 0 },
-//         localCoordinates: { meanX: 0, meanY: 0, meanZ: 0, observations: 0 },
-//         success: true,
-//         eventType: 'started',
-//         message: `Initialization sequence activated. Target: ${currentAccuracy}cm / ${currentDuration}s`
-//       } as any, ...prev]);
+//       // Note: Removed the manual setSurveyHistory 'started' payload from here.
+//       // The Unified Watcher useEffect below will safely catch the transition to true and log it once.
 
 //       setSurvey((prev) => ({
 //         ...prev,
@@ -402,6 +420,8 @@
 //       await api.startSurvey(currentDuration, currentAccuracy / 100);
 //       addLog('info', 'Survey started successfully');
 //     } catch (error) {
+//       startPendingRef.current = false;
+//       // Hardware failure to start (Log Error immediately)
 //       setSurveyHistory((prev) => [{
 //         id: `SRV-ERR-${Date.now().toString().slice(-6)}`,
 //         timestamp: new Date(),
@@ -427,6 +447,7 @@
 //     try {
 //       addLog('info', 'Stopping survey');
 //       stoppingRef.current = true;
+//       startPendingRef.current = false;
 //       setSurvey((prev) => ({ ...prev, isActive: false, status: 'stopped' }));
 
 //       let stopAttempts = 0;
@@ -448,36 +469,10 @@
 //           }
 //         }
 //       }
-
-//       setSurveyHistory((prev) => [{
-//         id: `SRV-STOP-${Date.now().toString().slice(-6)}`,
-//         timestamp: new Date(),
-//         duration: survey.elapsedTime,
-//         finalAccuracy: survey.currentAccuracy,
-//         targetAccuracy: survey.targetAccuracy,
-//         accuracyAttempts: [],
-//         coordinates: survey.position,
-//         localCoordinates: survey.localCoordinates,
-//         success: false,
-//         eventType: 'stopped',
-//         message: 'Survey manually halted by operator.'
-//       } as any, ...prev]);
+      
+//       // Note: We don't log 'stopped' here anymore. The Unified Watcher catches `stoppingRef.current` and logs it safely.
 
 //     } catch (error) {
-//       setSurveyHistory((prev) => [{
-//         id: `SRV-ERR-${Date.now().toString().slice(-6)}`,
-//         timestamp: new Date(),
-//         duration: survey.elapsedTime,
-//         finalAccuracy: survey.currentAccuracy,
-//         targetAccuracy: survey.targetAccuracy,
-//         accuracyAttempts: [],
-//         coordinates: survey.position,
-//         localCoordinates: survey.localCoordinates,
-//         success: false,
-//         eventType: 'error',
-//         message: `Stop execution error: ${String(error)}`
-//       } as any, ...prev]);
-
 //       addLog('error', `Unexpected survey stop error: ${String(error)}`);
 //       setSurvey((prev) => ({ ...prev, isActive: false, status: 'stopped' }));
 //     } finally {
@@ -485,12 +480,17 @@
 //         stoppingRef.current = false;
 //       }, 1000);
 //     }
-//   }, [survey.elapsedTime, survey.targetAccuracy, survey.currentAccuracy, survey.position, survey.localCoordinates, addLog]);
+//   }, [addLog]);
 
 //   /* ================= CONNECTION FUNCTIONS ================= */
 //   const connectToDevice = useCallback(async (type: "wifi" | "ble", identifier: string, password?: string) => {
 //     try {
-//       if (type === "wifi") await connectWifi(identifier, password);
+//       if (type === "wifi") {
+//         await connectWifi(identifier, password);
+//       } else {
+//         await connectBle(identifier);
+//       }
+
 //       connectWebSocket();
 //       setConnection(prev => ({ ...prev, isConnected: true, connectionType: type }));
 //       addLog('info', `Connected via ${type}`);
@@ -503,6 +503,7 @@
 //   const disconnect = useCallback(() => {
 //     intentionalDisconnectRef.current = true;
 //     stoppingRef.current = false;
+//     startPendingRef.current = false;
 //     setSurvey(prev => ({ ...prev, isActive: false, status: 'idle' }));
 //     setIsAutoFlowActive(false);
 //     wsRef.current?.close();
@@ -532,7 +533,9 @@
 
 //   const scanBLE = useCallback(async () => {
 //     try {
-//       addLog('info', 'BLE scan started');
+//       const devices = await scanBleDevices();
+//       setAvailableBLEDevices(devices);
+//       addLog('info', `Found ${devices.length} BLE devices`);
 //     } catch (error) {
 //       addLog('error', `BLE scan failed: ${String(error)}`);
 //     }
@@ -623,12 +626,21 @@
 //   /* ================= SURVEY STATUS POLL ================= */
 //   useEffect(() => {
 //     const pollInterval = setInterval(async () => {
+//       // Stop REST API polling from overriding live data if WebSocket is fully connected
+//       if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
 //       try {
 //         const surveyStatus = await api.getSurveyStatus();
 //         if (surveyStatus && !stoppingRef.current) {
 //           setSurvey((prev) => {
 //             const pollAccuracy = (surveyStatus.accuracy_m ?? 0) * 100;
 //             const pollElapsed = surveyStatus.progress_seconds ?? prev.elapsedTime;
+//             const pollActive = surveyStatus.active ?? prev.isActive;
+//             const withinStartGrace =
+//               startPendingRef.current &&
+//               prev.isActive &&
+//               !pollActive &&
+//               (Date.now() - startInitiatedAtRef.current) < START_PENDING_GRACE_MS;
             
 //             const parseVal = (val: any) => val !== undefined && val !== null ? Number(val) : undefined;
 //             const pos = surveyStatus.position || surveyStatus.local_position || {};
@@ -640,13 +652,26 @@
 //               observations: surveyStatus.observations ?? prev.localCoordinates.observations,
 //             };
 
+//             if (pollActive) {
+//               startPendingRef.current = false;
+//             }
+
+//             if (withinStartGrace) {
+//               return {
+//                 ...prev,
+//                 elapsedTime: pollElapsed > 0 ? pollElapsed : prev.elapsedTime,
+//                 currentAccuracy: pollAccuracy > 0 ? pollAccuracy : prev.currentAccuracy,
+//                 localCoordinates: pollLocalCoords,
+//               };
+//             }
+
 //             return {
 //               ...prev,
 //               elapsedTime: pollElapsed > 0 ? pollElapsed : prev.elapsedTime,
 //               currentAccuracy: pollAccuracy > 0 ? pollAccuracy : prev.currentAccuracy,
-//               isActive: surveyStatus.active ?? prev.isActive,
+//               isActive: pollActive,
 //               localCoordinates: pollLocalCoords,
-//               status: surveyStatus.active ? "in-progress" : (prev.isActive && !surveyStatus.active ? "completed" : prev.status)
+//               status: pollActive ? "in-progress" : (prev.isActive && !pollActive ? "completed" : prev.status)
 //             };
 //           });
 //         }
@@ -658,28 +683,73 @@
 //     return () => clearInterval(pollInterval);
 //   }, [survey.isActive]);
 
-//   // Log Auto-Complete events
+//   /* ================= UNIFIED SURVEY LIFECYCLE WATCHER ================= */
 //   const prevIsActive = useRef(survey.isActive);
+  
 //   useEffect(() => {
-//     if (prevIsActive.current === true && survey.isActive === false && !stoppingRef.current) {
-//       const isSuccess = survey.currentAccuracy <= survey.targetAccuracy && survey.currentAccuracy > 0;
-      
+//     // Transition 1: FALSE ➔ TRUE (Survey has Started manually or via auto-flow)
+//     if (prevIsActive.current === false && survey.isActive === true) {
 //       setSurveyHistory((prev) => [{
-//         id: `SRV-COMP-${Date.now().toString().slice(-6)}`,
+//         id: `SRV-START-${Date.now().toString().slice(-6)}`,
 //         timestamp: new Date(),
-//         duration: survey.elapsedTime,
-//         finalAccuracy: survey.currentAccuracy,
+//         duration: 0,
+//         finalAccuracy: 0,
 //         targetAccuracy: survey.targetAccuracy,
 //         accuracyAttempts: [],
-//         coordinates: { ...survey.position },
-//         localCoordinates: { ...survey.localCoordinates },
-//         success: isSuccess,
-//         eventType: isSuccess ? 'completed' : 'error',
-//         message: isSuccess ? 'Hardware reported successful convergence.' : 'Survey terminated without reaching target constraints.'
+//         coordinates: { latitude: 0, longitude: 0, altitude: 0, accuracy: 0 },
+//         localCoordinates: { meanX: 0, meanY: 0, meanZ: 0, observations: 0 },
+//         success: true,
+//         eventType: 'started',
+//         message: `Survey sequence initialized. Target: ${survey.targetAccuracy}cm`
 //       } as any, ...prev]);
-
-//       addLog(isSuccess ? 'info' : 'warning', `Survey convergence complete. Accuracy: ${survey.currentAccuracy.toFixed(2)}cm`);
 //     }
+
+//     // Transition 2: TRUE ➔ FALSE (Survey has Finished, Errored, or was manually Stopped)
+//     if (prevIsActive.current === true && survey.isActive === false) {
+//       startPendingRef.current = false;
+      
+//       // ANTI-FLUTTER SAFEGUARD: Ignore brief false-positives from network lag
+//       if (survey.elapsedTime < 2 && survey.currentAccuracy === 0 && !stoppingRef.current) {
+//         console.warn("Ignored ghost state transition (API Polling lag)");
+//       } 
+//       // Manual Stop
+//       else if (stoppingRef.current) {
+//         setSurveyHistory((prev) => [{
+//           id: `SRV-STOP-${Date.now().toString().slice(-6)}`,
+//           timestamp: new Date(),
+//           duration: survey.elapsedTime,
+//           finalAccuracy: survey.currentAccuracy,
+//           targetAccuracy: survey.targetAccuracy,
+//           accuracyAttempts: [],
+//           coordinates: { ...survey.position },
+//           localCoordinates: { ...survey.localCoordinates },
+//           success: false,
+//           eventType: 'stopped',
+//           message: 'Survey manually halted by operator.'
+//         } as any, ...prev]);
+//       } 
+//       // Natural Completion or Error
+//       else {
+//         const isSuccess = survey.currentAccuracy <= survey.targetAccuracy && survey.currentAccuracy > 0;
+        
+//         setSurveyHistory((prev) => [{
+//           id: `SRV-${isSuccess ? 'COMP' : 'ERR'}-${Date.now().toString().slice(-6)}`,
+//           timestamp: new Date(),
+//           duration: survey.elapsedTime,
+//           finalAccuracy: survey.currentAccuracy,
+//           targetAccuracy: survey.targetAccuracy,
+//           accuracyAttempts: [],
+//           coordinates: { ...survey.position },
+//           localCoordinates: { ...survey.localCoordinates },
+//           success: isSuccess,
+//           eventType: isSuccess ? 'completed' : 'error',
+//           message: isSuccess ? 'Hardware reported successful convergence.' : 'Survey terminated without reaching target constraints.'
+//         } as any, ...prev]);
+
+//         addLog(isSuccess ? 'info' : 'warning', `Survey convergence complete. Accuracy: ${survey.currentAccuracy.toFixed(2)}cm`);
+//       }
+//     }
+    
 //     prevIsActive.current = survey.isActive;
 //   }, [survey.isActive, survey.currentAccuracy, survey.targetAccuracy, survey.elapsedTime, survey.position, survey.localCoordinates, addLog]);
 
@@ -769,7 +839,7 @@
 //       addLog,
 //       clearLogs,
 //       clearSurveyHistory,
-//       deleteSurveys, // ⭐ Exported new function
+//       deleteSurveys,
 //       exportHistoryCSV,
 //       exportLogsCSV,
 //       startNTRIP,
@@ -784,6 +854,36 @@
 //     </GNSSContext.Provider>
 //   );
 // };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -822,17 +922,18 @@ import {
   Satellite,
 } from "../types/gnss";
 
-import { api, WS_URL } from "../api/gnssApi";
+import { api, WS_URL, setApiHost } from "../api/gnssApi";
 import { scanWifi, connectWifi } from "../native/wifi";
 import { connectBle, scanBleDevices } from "../native/ble";
 import { uiLogger } from "../utils/uiLogger";
-import { toast } from "sonner"; 
+import { toast } from "sonner";
+import { stealthPing, validateManualIP } from "../utils/ipDiscovery"; 
 
 /* ================= CONTEXT TYPE ================= */
 
 type GNSSContextType = {
   connection: ConnectionState;
-  connectToDevice: (type: "wifi" | "ble", identifier: string, password?: string) => Promise<void>;
+  connectToDevice: (type: "wifi" | "ble" | "auto", identifier: string, password?: string, wsUrl?: string) => Promise<void>;
   disconnect: () => void;
   survey: SurveyState;
   startSurvey: () => Promise<void>;
@@ -873,6 +974,7 @@ export const useGNSS = () => {
 
 export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const wsRef = useRef<WebSocket | null>(null);
+  const activeWsUrlRef = useRef<string>(WS_URL);
   const stoppingRef = useRef(false);
   const intentionalDisconnectRef = useRef(false);
   const startPendingRef = useRef(false);
@@ -932,6 +1034,13 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [availableBLEDevices, setAvailableBLEDevices] = useState<BLEDevice[]>([]);
   const [surveyHistory, setSurveyHistory] = useState<SurveyHistoryEntry[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [lastSavedWsUrl, setLastSavedWsUrl] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('gnss_last_ws');
+    } catch {
+      return null;
+    }
+  });
 
   /* ================= PERSISTED DEFAULTS ================= */
   const DEFAULT_CONFIG: Configuration = {
@@ -1047,7 +1156,6 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     toast.success("Survey history cleared");
   }, []);
 
-  // Allow deletion of specific records
   const deleteSurveys = useCallback((ids: string[]) => {
     setSurveyHistory(prev => prev.filter(s => !ids.includes(s.id)));
     toast.success(`Deleted ${ids.length} record(s)`);
@@ -1055,14 +1163,28 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /* ================= WEBSOCKET ================= */
 
-  const connectWebSocket = useCallback(() => {
+  const connectWebSocket = useCallback((customUrl?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    
+    if (customUrl) {
+      activeWsUrlRef.current = customUrl;
+      setApiHost(customUrl);
+    }
 
-    wsRef.current = new WebSocket(WS_URL);
+    wsRef.current = new WebSocket(activeWsUrlRef.current);
 
     wsRef.current.onopen = () => {
       setConnection((prev) => ({ ...prev, isConnected: true, lastConnectedTimestamp: new Date() }));
       addLog('info', 'WebSocket connected');
+      
+      // ⭐ MEMORY STORAGE RULE: The moment connection is successful, securely write the IP to memory
+      try {
+        localStorage.setItem('gnss_last_ws', activeWsUrlRef.current);
+        setLastSavedWsUrl(activeWsUrlRef.current);
+        console.log(`💾 Saved successful connection: ${activeWsUrlRef.current}`);
+      } catch (e) {
+        console.warn('Failed to save WS URL:', e);
+      }
     };
 
     wsRef.current.onmessage = (event) => {
@@ -1180,8 +1302,6 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [addLog]);
 
   useEffect(() => {
-    connectWebSocket();
-
     const reconnectTimer = setInterval(() => {
       const wsDown = wsRef.current?.readyState !== WebSocket.OPEN;
       const surveyInactive = !survey.isActive;
@@ -1203,9 +1323,6 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       startPendingRef.current = true;
       startInitiatedAtRef.current = Date.now();
 
-      // Note: Removed the manual setSurveyHistory 'started' payload from here.
-      // The Unified Watcher useEffect below will safely catch the transition to true and log it once.
-
       setSurvey((prev) => ({
         ...prev,
         isActive: true,
@@ -1221,7 +1338,6 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addLog('info', 'Survey started successfully');
     } catch (error) {
       startPendingRef.current = false;
-      // Hardware failure to start (Log Error immediately)
       setSurveyHistory((prev) => [{
         id: `SRV-ERR-${Date.now().toString().slice(-6)}`,
         timestamp: new Date(),
@@ -1269,9 +1385,6 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       }
-      
-      // Note: We don't log 'stopped' here anymore. The Unified Watcher catches `stoppingRef.current` and logs it safely.
-
     } catch (error) {
       addLog('error', `Unexpected survey stop error: ${String(error)}`);
       setSurvey((prev) => ({ ...prev, isActive: false, status: 'stopped' }));
@@ -1282,24 +1395,70 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [addLog]);
 
-  /* ================= CONNECTION FUNCTIONS ================= */
-  const connectToDevice = useCallback(async (type: "wifi" | "ble", identifier: string, password?: string) => {
+/* ================= CONNECTION FUNCTIONS ================= */
+  const connectToDevice = useCallback(async (type: "wifi" | "ble" | "auto", identifier: string, password?: string, wsUrl?: string) => {
     try {
-      if (type === "wifi") {
-        await connectWifi(identifier, password);
-      } else {
+      let finalWsUrl = wsUrl;
+
+      // Auto mode: one strict 3-second check against the saved node only
+      if (type === 'auto') {
+        addLog('info', 'Auto Mode: Attempting stealth ping...');
+        if (lastSavedWsUrl) {
+          const pingResult = await stealthPing(lastSavedWsUrl, 3000);
+          if (pingResult) {
+            addLog('info', 'Stealth ping successful!');
+            finalWsUrl = pingResult;
+          } else {
+            addLog('warning', 'Stealth ping failed. Saved IP may have changed.');
+            throw new Error('Connection rejected. The hardware IP may have changed.');
+          }
+        } else {
+          addLog('warning', 'No saved connection. Manual WLAN sweep required.');
+          throw new Error('No previous connection found. Please use the WLAN Socket tab first.');
+        }
+      }
+      // Manual WiFi via discovered/manual WS URL: connect directly (no native WiFi join flow)
+      else if (type === 'wifi' && finalWsUrl) {
+        // finalWsUrl is already resolved by scanner/manual input
+      }
+      // Manual WiFi by raw IP string
+      else if (type === 'wifi' && identifier && identifier !== 'CURRENT_WIFI' && !identifier.includes('WLAN')) {
+        // Check if it looks like an IP address
+        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(identifier)) {
+          addLog('info', `Validating manual IP: ${identifier}`);
+          finalWsUrl = await validateManualIP(identifier);
+          if (!finalWsUrl) {
+            throw new Error(`IP validation failed: ${identifier}`);
+          }
+        } else {
+          // Regular WiFi network - just connect
+          await connectWifi(identifier, password);
+        }
+      } else if (type === 'wifi') {
+        if (identifier && identifier !== 'CURRENT_WIFI') {
+          await connectWifi(identifier, password);
+        }
+      } else if (type === 'ble') {
         await connectBle(identifier);
       }
 
-      connectWebSocket();
-      setConnection(prev => ({ ...prev, isConnected: true, connectionType: type }));
-      addLog('info', `Connected via ${type}`);
+      // ⭐ Update API host if we have a new WS URL
+      if (finalWsUrl) {
+        setApiHost(finalWsUrl);
+      }
+
+      // ⭐ Connect WebSocket with discovered URL
+      const resolvedType = type === 'auto' ? 'wifi' : type;
+      connectWebSocket(finalWsUrl);
+      setConnection(prev => ({ ...prev, connectionType: resolvedType }));
+      addLog('info', `Connecting via ${type}`);
     } catch (error) {
       addLog('error', `Connection failed: ${String(error)}`);
       throw error;
     }
-  }, [connectWebSocket, addLog]);
+  }, [connectWebSocket, lastSavedWsUrl, addLog]);
 
+  // ⭐ THE MISSING DISCONNECT FUNCTION
   const disconnect = useCallback(() => {
     intentionalDisconnectRef.current = true;
     stoppingRef.current = false;
@@ -1307,6 +1466,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSurvey(prev => ({ ...prev, isActive: false, status: 'idle' }));
     setIsAutoFlowActive(false);
     wsRef.current?.close();
+    setConnection(prev => ({ ...prev, isConnected: false, connectionType: 'none' })); // Force UI reset
     addLog('info', 'Disconnected from device');
   }, [addLog]);
 
@@ -1426,7 +1586,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /* ================= SURVEY STATUS POLL ================= */
   useEffect(() => {
     const pollInterval = setInterval(async () => {
-      // Stop REST API polling from overriding live data if WebSocket is fully connected
+      if (!connection.isConnected) return;
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
       try {
@@ -1481,13 +1641,12 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, survey.isActive ? 2000 : 5000);
 
     return () => clearInterval(pollInterval);
-  }, [survey.isActive]);
+  }, [survey.isActive, connection.isConnected]);
 
   /* ================= UNIFIED SURVEY LIFECYCLE WATCHER ================= */
   const prevIsActive = useRef(survey.isActive);
   
   useEffect(() => {
-    // Transition 1: FALSE ➔ TRUE (Survey has Started manually or via auto-flow)
     if (prevIsActive.current === false && survey.isActive === true) {
       setSurveyHistory((prev) => [{
         id: `SRV-START-${Date.now().toString().slice(-6)}`,
@@ -1504,15 +1663,12 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any, ...prev]);
     }
 
-    // Transition 2: TRUE ➔ FALSE (Survey has Finished, Errored, or was manually Stopped)
     if (prevIsActive.current === true && survey.isActive === false) {
       startPendingRef.current = false;
       
-      // ANTI-FLUTTER SAFEGUARD: Ignore brief false-positives from network lag
       if (survey.elapsedTime < 2 && survey.currentAccuracy === 0 && !stoppingRef.current) {
         console.warn("Ignored ghost state transition (API Polling lag)");
       } 
-      // Manual Stop
       else if (stoppingRef.current) {
         setSurveyHistory((prev) => [{
           id: `SRV-STOP-${Date.now().toString().slice(-6)}`,
@@ -1528,7 +1684,6 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
           message: 'Survey manually halted by operator.'
         } as any, ...prev]);
       } 
-      // Natural Completion or Error
       else {
         const isSuccess = survey.currentAccuracy <= survey.targetAccuracy && survey.currentAccuracy > 0;
         
@@ -1556,6 +1711,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /* ================= NTRIP STATUS POLL ================= */
   useEffect(() => {
     const pollInterval = setInterval(async () => {
+      if (!connection.isConnected) return;
       try {
         const ntripStatus = await api.getNTRIP();
         if (ntripStatus) {
@@ -1578,7 +1734,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, 2000);
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [connection.isConnected]);
 
   /* ================= AUTO MODE ================= */
   useEffect(() => {
