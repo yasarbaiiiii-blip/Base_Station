@@ -955,6 +955,8 @@ type GNSSContextType = {
   addLog: (level: 'error' | 'warning' | 'info', message: string) => void;
   clearLogs: () => void;
   clearSurveyHistory: () => void; 
+  clearAppCache: () => void;
+  factoryResetApp: () => void;
   deleteSurveys: (ids: string[]) => void;
   exportHistoryCSV: () => Promise<void>;
   exportLogsCSV: () => Promise<void>;
@@ -982,19 +984,29 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const START_PENDING_GRACE_MS = 3500;
   
   const autoSurveyRunRef = useRef<boolean>(true);
+  const STORAGE_KEYS = {
+    connection: 'gnss_connection',
+    survey: 'gnss_survey',
+    gnssStatus: 'gnss_status',
+    streams: 'gnss_streams',
+    history: 'gnss_history',
+    logs: 'gnss_logs',
+    configuration: 'gnss_configuration',
+    settings: 'gnss_settings',
+    lastWs: 'gnss_last_ws',
+    ntripArmed: 'gnss_ntrip_user_armed',
+  } as const;
 
-  /* ================= STATE ================= */
-
-  const [connection, setConnection] = useState<ConnectionState>({
+  const defaultStream = { enabled: false, active: false, throughput: 0, messageRate: 0 };
+  const DEFAULT_CONNECTION: ConnectionState = {
     connectionType: "none",
     isConnected: false,
     lastConnectedTimestamp: null,
     signalStrength: 0,
     latency: 0,
     autoReconnect: true,
-  });
-
-  const [survey, setSurvey] = useState<SurveyState>({
+  };
+  const DEFAULT_SURVEY: SurveyState = {
     surveyMode: "survey-in",
     isActive: false,
     valid: false,
@@ -1007,11 +1019,8 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localCoordinates: { meanX: 0, meanY: 0, meanZ: 0, observations: 0 },
     status: "idle",
     satelliteCount: 0,
-  });
-
-  const [isAutoFlowActive, setIsAutoFlowActive] = useState(false);
-
-  const [gnssStatus, setGNSSStatus] = useState<GNSSStatus>({
+  };
+  const createDefaultGNSSStatus = (): GNSSStatus => ({
     satellites: [],
     fixType: "none",
     dop: { hdop: null, vdop: null, pdop: null },
@@ -1021,22 +1030,39 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     activeConstellations: [],
     globalPosition: { latitude: 0, longitude: 0, altitude: 0, horizontalAccuracy: 0 },
   });
-
-  const defaultStream = { enabled: false, active: false, throughput: 0, messageRate: 0 };
-  const [streams, setStreams] = useState<StreamState>({
+  const DEFAULT_STREAMS: StreamState = {
     serial: { ...defaultStream },
     ntrip: { ...defaultStream, mountpoint: "", uptime: 0, dataSent: 0, lastError: null },
     tcp: { ...defaultStream, connectedClients: 0 },
     udp: { ...defaultStream },
-  });
+  };
+
+  /* ================= STATE ================= */
+
+  const [connection, setConnection] = useState<ConnectionState>(DEFAULT_CONNECTION);
+
+  const [survey, setSurvey] = useState<SurveyState>(DEFAULT_SURVEY);
+
+  const [isAutoFlowActive, setIsAutoFlowActive] = useState(false);
+
+  const [gnssStatus, setGNSSStatus] = useState<GNSSStatus>(createDefaultGNSSStatus);
+
+  const [streams, setStreams] = useState<StreamState>(DEFAULT_STREAMS);
 
   const [availableWiFiNetworks, setAvailableWiFiNetworks] = useState<WiFiNetwork[]>([]);
   const [availableBLEDevices, setAvailableBLEDevices] = useState<BLEDevice[]>([]);
   const [surveyHistory, setSurveyHistory] = useState<SurveyHistoryEntry[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [isNtripUserArmed, setIsNtripUserArmed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.ntripArmed) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [lastSavedWsUrl, setLastSavedWsUrl] = useState<string | null>(() => {
     try {
-      return localStorage.getItem('gnss_last_ws');
+      return localStorage.getItem(STORAGE_KEYS.lastWs);
     } catch {
       return null;
     }
@@ -1070,7 +1096,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPersistedConfig = (): Configuration => {
     try {
-      const saved = localStorage.getItem('gnss_configuration');
+      const saved = localStorage.getItem(STORAGE_KEYS.configuration);
       if (saved) {
         const parsed = JSON.parse(saved) as Configuration;
         return {
@@ -1101,7 +1127,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPersistedSettings = (): AppSettings => {
     try {
-      const saved = localStorage.getItem('gnss_settings');
+      const saved = localStorage.getItem(STORAGE_KEYS.settings);
       if (saved) {
         const parsed = JSON.parse(saved) as AppSettings;
         return {
@@ -1121,6 +1147,132 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [configuration, setConfiguration] = useState<Configuration>(loadPersistedConfig);
   const [settings, setSettings] = useState<AppSettings>(loadPersistedSettings);
 
+  useEffect(() => {
+    try {
+      const rawConnection = localStorage.getItem(STORAGE_KEYS.connection);
+      if (rawConnection) {
+        const parsed = JSON.parse(rawConnection) as ConnectionState;
+        setConnection({
+          ...DEFAULT_CONNECTION,
+          ...parsed,
+          isConnected: false,
+          lastConnectedTimestamp: parsed.lastConnectedTimestamp ? new Date(parsed.lastConnectedTimestamp) : null,
+        });
+      }
+
+      const rawSurvey = localStorage.getItem(STORAGE_KEYS.survey);
+      if (rawSurvey) {
+        const parsed = JSON.parse(rawSurvey) as SurveyState;
+        setSurvey({ ...DEFAULT_SURVEY, ...parsed });
+      }
+
+      const rawGNSS = localStorage.getItem(STORAGE_KEYS.gnssStatus);
+      if (rawGNSS) {
+        const parsed = JSON.parse(rawGNSS) as GNSSStatus;
+        setGNSSStatus({
+          ...createDefaultGNSSStatus(),
+          ...parsed,
+          lastUpdate: parsed.lastUpdate ? new Date(parsed.lastUpdate) : new Date(),
+        });
+      }
+
+      const rawStreams = localStorage.getItem(STORAGE_KEYS.streams);
+      if (rawStreams) {
+        const parsed = JSON.parse(rawStreams) as StreamState;
+        setStreams({
+          ...DEFAULT_STREAMS,
+          ...parsed,
+          serial: { ...DEFAULT_STREAMS.serial, ...parsed.serial },
+          ntrip: isNtripUserArmed
+            ? { ...DEFAULT_STREAMS.ntrip, ...parsed.ntrip }
+            : { ...DEFAULT_STREAMS.ntrip, enabled: false, active: false, throughput: 0, uptime: 0, dataSent: 0 },
+          tcp: { ...DEFAULT_STREAMS.tcp, ...parsed.tcp },
+          udp: { ...DEFAULT_STREAMS.udp, ...parsed.udp },
+        });
+      }
+
+      const rawHistory = localStorage.getItem(STORAGE_KEYS.history);
+      if (rawHistory) {
+        const parsed = JSON.parse(rawHistory) as SurveyHistoryEntry[];
+        setSurveyHistory(parsed.map((entry) => ({
+          ...entry,
+          timestamp: new Date(entry.timestamp),
+        })));
+      }
+
+      const rawLogs = localStorage.getItem(STORAGE_KEYS.logs);
+      if (rawLogs) {
+        const parsed = JSON.parse(rawLogs) as LogEntry[];
+        setLogs(parsed.map((entry) => ({
+          ...entry,
+          timestamp: new Date(entry.timestamp),
+        })));
+      }
+    } catch (e) {
+      console.warn('Failed to hydrate app runtime state:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.connection, JSON.stringify(connection));
+    } catch (e) {
+      console.warn('Failed to persist connection state:', e);
+    }
+  }, [connection]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.survey, JSON.stringify(survey));
+    } catch (e) {
+      console.warn('Failed to persist survey state:', e);
+    }
+  }, [survey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.gnssStatus, JSON.stringify(gnssStatus));
+    } catch (e) {
+      console.warn('Failed to persist GNSS status:', e);
+    }
+  }, [gnssStatus]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.streams, JSON.stringify(streams));
+    } catch (e) {
+      console.warn('Failed to persist stream state:', e);
+    }
+  }, [streams]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(surveyHistory));
+    } catch (e) {
+      console.warn('Failed to persist survey history:', e);
+    }
+  }, [surveyHistory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.logs, JSON.stringify(logs));
+    } catch (e) {
+      console.warn('Failed to persist logs:', e);
+    }
+  }, [logs]);
+
+  useEffect(() => {
+    try {
+      if (isNtripUserArmed) {
+        localStorage.setItem(STORAGE_KEYS.ntripArmed, '1');
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.ntripArmed);
+      }
+    } catch (e) {
+      console.warn('Failed to persist NTRIP arm state:', e);
+    }
+  }, [isNtripUserArmed]);
+
   /* ================= HELPER FUNCTIONS ================= */
 
   useEffect(() => {
@@ -1134,7 +1286,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...prev,
                 baseStation: { ...prev.baseStation, autoMode: cfg.enabled },
               };
-              localStorage.setItem('gnss_configuration', JSON.stringify(updated));
+              localStorage.setItem(STORAGE_KEYS.configuration, JSON.stringify(updated));
               return updated;
             });
           }
@@ -1179,7 +1331,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // ⭐ MEMORY STORAGE RULE: The moment connection is successful, securely write the IP to memory
       try {
-        localStorage.setItem('gnss_last_ws', activeWsUrlRef.current);
+        localStorage.setItem(STORAGE_KEYS.lastWs, activeWsUrlRef.current);
         setLastSavedWsUrl(activeWsUrlRef.current);
         console.log(`💾 Saved successful connection: ${activeWsUrlRef.current}`);
       } catch (e) {
@@ -1505,7 +1657,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateConfiguration = useCallback((config: Configuration) => {
     setConfiguration(config);
     try {
-      localStorage.setItem('gnss_configuration', JSON.stringify(config));
+      localStorage.setItem(STORAGE_KEYS.configuration, JSON.stringify(config));
     } catch (e) {
       console.warn('Failed to save configuration:', e);
     }
@@ -1521,7 +1673,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSettings((prev) => {
       const next = { ...prev, ...patch };
       try {
-        localStorage.setItem('gnss_settings', JSON.stringify(next));
+        localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next));
       } catch (e) {
         console.warn('Failed to save settings:', e);
       }
@@ -1530,6 +1682,53 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const clearLogs = useCallback(() => setLogs([]), []);
+  const clearAppCache = useCallback(() => {
+    wsRef.current?.close();
+    setIsNtripUserArmed(false);
+    setConnection(DEFAULT_CONNECTION);
+    setSurvey(DEFAULT_SURVEY);
+    setGNSSStatus(createDefaultGNSSStatus());
+    setStreams(DEFAULT_STREAMS);
+    setSurveyHistory([]);
+    setLogs([]);
+    setIsAutoFlowActive(false);
+    setLastSavedWsUrl(null);
+    activeWsUrlRef.current = WS_URL;
+    localStorage.removeItem(STORAGE_KEYS.connection);
+    localStorage.removeItem(STORAGE_KEYS.survey);
+    localStorage.removeItem(STORAGE_KEYS.gnssStatus);
+    localStorage.removeItem(STORAGE_KEYS.streams);
+    localStorage.removeItem(STORAGE_KEYS.history);
+    localStorage.removeItem(STORAGE_KEYS.logs);
+    localStorage.removeItem(STORAGE_KEYS.lastWs);
+    localStorage.removeItem(STORAGE_KEYS.ntripArmed);
+    toast.success("App cache cleared");
+  }, []);
+
+  const factoryResetApp = useCallback(() => {
+    // Best effort: stop backend NTRIP casting before wiping local state.
+    if (connection.isConnected && (streams.ntrip.active || streams.ntrip.enabled)) {
+      void api.stopNTRIP()
+        .then(() => addLog('info', 'NTRIP stopped due to factory reset'))
+        .catch((error) => addLog('warning', `Factory reset: failed to stop NTRIP on backend: ${String(error)}`));
+    }
+
+    wsRef.current?.close();
+    setIsNtripUserArmed(false);
+    setConnection(DEFAULT_CONNECTION);
+    setSurvey(DEFAULT_SURVEY);
+    setGNSSStatus(createDefaultGNSSStatus());
+    setStreams(DEFAULT_STREAMS);
+    setSurveyHistory([]);
+    setLogs([]);
+    setIsAutoFlowActive(false);
+    setLastSavedWsUrl(null);
+    setConfiguration(DEFAULT_CONFIG);
+    setSettings(DEFAULT_SETTINGS);
+    activeWsUrlRef.current = WS_URL;
+    Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
+    toast.success("Factory reset completed");
+  }, [connection.isConnected, streams.ntrip.active, streams.ntrip.enabled, addLog]);
   const exportHistoryCSV = useCallback(async () => {}, []);
   const exportLogsCSV = useCallback(async () => {}, []);
 
@@ -1542,8 +1741,10 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ntrip: { ...prev.ntrip, enabled: true, active: true, mountpoint },
       }));
       await api.startNTRIP(host, port, mountpoint, password, username);
+      setIsNtripUserArmed(true);
       addLog('info', 'NTRIP started successfully');
     } catch (error) {
+      setIsNtripUserArmed(false);
       setStreams((prev) => ({
         ...prev,
         ntrip: { ...prev.ntrip, enabled: false, active: false },
@@ -1556,6 +1757,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const stopNTRIP = useCallback(async () => {
     try {
       addLog('info', 'Stopping NTRIP');
+      setIsNtripUserArmed(false);
       setStreams((prev) => ({
         ...prev,
         ntrip: { ...prev.ntrip, enabled: false, active: false, throughput: 0, uptime: 0, dataSent: 0 },
@@ -1563,6 +1765,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await api.stopNTRIP();
       addLog('info', 'NTRIP stopped successfully');
     } catch (error) {
+      setIsNtripUserArmed(false);
       addLog('error', `NTRIP stop failed: ${String(error)}`);
       throw error;
     }
@@ -1710,8 +1913,31 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /* ================= NTRIP STATUS POLL ================= */
   useEffect(() => {
+    if (!connection.isConnected || isNtripUserArmed) return;
+
+    // Enforce "manual start only" policy when app connects or restarts.
+    setStreams((prev) => ({
+      ...prev,
+      ntrip: {
+        ...prev.ntrip,
+        enabled: false,
+        active: false,
+        throughput: 0,
+        uptime: 0,
+        dataSent: 0,
+        lastError: null,
+      },
+    }));
+
+    void api.stopNTRIP().catch(() => {
+      // Best effort only; if backend is unreachable we still keep local NTRIP disabled.
+    });
+  }, [connection.isConnected, isNtripUserArmed]);
+
+  useEffect(() => {
     const pollInterval = setInterval(async () => {
       if (!connection.isConnected) return;
+      if (!isNtripUserArmed) return;
       try {
         const ntripStatus = await api.getNTRIP();
         if (ntripStatus) {
@@ -1734,7 +1960,7 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, 2000);
     return () => clearInterval(pollInterval);
-  }, [connection.isConnected]);
+  }, [connection.isConnected, isNtripUserArmed]);
 
   /* ================= AUTO MODE ================= */
   useEffect(() => {
@@ -1795,13 +2021,15 @@ export const GNSSProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addLog,
       clearLogs,
       clearSurveyHistory,
+      clearAppCache,
+      factoryResetApp,
       deleteSurveys,
       exportHistoryCSV,
       exportLogsCSV,
       startNTRIP,
       stopNTRIP,
     }),
-    [connection, survey, isAutoFlowActive, gnssStatus, streams, configuration, settings, surveyHistory, logs, connectToDevice, disconnect, startSurvey, stopSurvey, toggleStream, updateConfiguration, updateSettings, scanWiFi, scanBLE, addLog, clearLogs, clearSurveyHistory, deleteSurveys, exportHistoryCSV, exportLogsCSV, startNTRIP, stopNTRIP]
+    [connection, survey, isAutoFlowActive, gnssStatus, streams, configuration, settings, surveyHistory, logs, connectToDevice, disconnect, startSurvey, stopSurvey, toggleStream, updateConfiguration, updateSettings, scanWiFi, scanBLE, addLog, clearLogs, clearSurveyHistory, clearAppCache, factoryResetApp, deleteSurveys, exportHistoryCSV, exportLogsCSV, startNTRIP, stopNTRIP]
   );
 
   return (

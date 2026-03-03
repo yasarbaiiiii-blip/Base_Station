@@ -28,13 +28,21 @@ import {
 import { toast } from 'sonner';
 
 export const SettingsScreen: React.FC = () => {
-  const { settings, updateSettings, gnssStatus } = useGNSS();
+  const { settings, updateSettings, gnssStatus, clearAppCache, factoryResetApp } = useGNSS();
   const { i18n } = useTranslation();
 
   const handleAction = (msg: string) => {
     toast.success(msg, {
       icon: <Zap className="size-4 text-blue-500" />,
     });
+  };
+
+  const handleClearCache = () => {
+    clearAppCache();
+  };
+
+  const handleFactoryReset = () => {
+    factoryResetApp();
   };
 
   // UI Variable classes for consistency
@@ -245,11 +253,11 @@ export const SettingsScreen: React.FC = () => {
                <AlertDialogContent className="dark:bg-slate-900 dark:border-slate-800">
                  <AlertDialogHeader>
                    <AlertDialogTitle className="dark:text-slate-50">Clear temporary data?</AlertDialogTitle>
-                   <AlertDialogDescription className="dark:text-slate-400 text-xs">This action removes cached survey snapshots and logs. The base station configuration is unaffected.</AlertDialogDescription>
+                   <AlertDialogDescription className="dark:text-slate-400 text-xs">This clears runtime cache data (live survey state, stream state, history, logs, and saved node URL). Configuration and preferences are kept.</AlertDialogDescription>
                  </AlertDialogHeader>
                  <AlertDialogFooter>
                    <AlertDialogCancel className="dark:bg-slate-950 dark:text-slate-300 border-none">Cancel</AlertDialogCancel>
-                   <AlertDialogAction onClick={() => handleAction('Cache purged')} className="bg-red-600 hover:bg-red-700 text-sm font-bold">Wipe Data</AlertDialogAction>
+                   <AlertDialogAction onClick={handleClearCache} className="bg-red-600 hover:bg-red-700 text-sm font-bold">Wipe Data</AlertDialogAction>
                  </AlertDialogFooter>
                </AlertDialogContent>
              </AlertDialog>
@@ -263,11 +271,11 @@ export const SettingsScreen: React.FC = () => {
                <AlertDialogContent className="dark:bg-slate-900 dark:border-slate-800">
                  <AlertDialogHeader>
                    <AlertDialogTitle className="dark:text-slate-50 text-base">Reset all settings?</AlertDialogTitle>
-                   <AlertDialogDescription className="dark:text-slate-400 text-xs">This returns all Units, Themes, and Notifications to their original state.</AlertDialogDescription>
+                   <AlertDialogDescription className="dark:text-slate-400 text-xs">This clears all app data, including runtime state, logs, history, saved node URL, configuration, and preferences.</AlertDialogDescription>
                  </AlertDialogHeader>
                  <AlertDialogFooter>
                    <AlertDialogCancel className="dark:bg-slate-950 dark:text-slate-300 border-none">Cancel</AlertDialogCancel>
-                   <AlertDialogAction onClick={() => handleAction('App reset complete')} className="bg-red-600 hover:bg-red-700 text-sm font-bold">Reset</AlertDialogAction>
+                   <AlertDialogAction onClick={handleFactoryReset} className="bg-red-600 hover:bg-red-700 text-sm font-bold">Reset</AlertDialogAction>
                  </AlertDialogFooter>
                </AlertDialogContent>
              </AlertDialog>
