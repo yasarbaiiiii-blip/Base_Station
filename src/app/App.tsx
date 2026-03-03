@@ -299,6 +299,7 @@
 
 
 import React, { useState, useEffect } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { GNSSProvider, useGNSS } from '../context/GNSSContext';
 import { ConnectionScreen } from './components/ConnectionScreen';
 import { DashboardScreen } from './components/DashboardScreen';
@@ -321,6 +322,7 @@ type Screen = 'connection' | 'dashboard' | 'configuration' | 'history' | 'settin
 const AppContent: React.FC = () => {
   const { connection, disconnect, settings, survey } = useGNSS();
   const [currentScreen, setCurrentScreen] = useState<Screen>('connection');
+  const [screenHistory, setScreenHistory] = useState<Screen[]>([]);
 
   // Apply theme on mount and when settings change
   useEffect(() => {
@@ -360,6 +362,7 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!connection.isConnected && !survey.isActive && currentScreen !== 'connection') {
       setCurrentScreen('connection');
+      setScreenHistory([]);
     }
   }, [connection.isConnected, survey.isActive, currentScreen]);
 
@@ -374,14 +377,50 @@ const AppContent: React.FC = () => {
   const handleDisconnect = () => {
     uiLogger.log('Disconnect button clicked', 'App');
     disconnect();
+    setScreenHistory([]);
     setCurrentScreen('connection');
     uiLogger.log('Navigated to Connection Screen', 'App');
   };
 
   const handleScreenChange = (screen: Screen) => {
     uiLogger.log(`Maps to ${screen}`, 'App', { screen });
+    setScreenHistory((prev) => (
+      currentScreen !== screen ? [...prev, currentScreen] : prev
+    ));
     setCurrentScreen(screen);
   };
+
+  useEffect(() => {
+    let removed = false;
+    let listenerHandle: { remove: () => Promise<void> } | null = null;
+
+    CapacitorApp.addListener('backButton', () => {
+      setScreenHistory((prev) => {
+        if (prev.length === 0) {
+          CapacitorApp.exitApp();
+          return prev;
+        }
+
+        const copy = [...prev];
+        const previous = copy.pop() as Screen;
+        setCurrentScreen(previous);
+        return copy;
+      });
+    }).then((handle) => {
+      if (removed) {
+        void handle.remove();
+        return;
+      }
+      listenerHandle = handle;
+    });
+
+    return () => {
+      removed = true;
+      if (listenerHandle) {
+        void listenerHandle.remove();
+      }
+    };
+  }, []);
 
   // Listen for reconfigure button click
   useEffect(() => {

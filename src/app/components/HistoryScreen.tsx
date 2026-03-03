@@ -26,8 +26,8 @@ import {
   PlayCircle,
   StopCircle,
   ChevronDown,
-  ListChecks,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +35,9 @@ import { toast } from 'sonner';
 const SurveyAccordionCard = ({ survey, style, selectionMode, isSelected, onSelect, onShare }: any) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const EventIcon = style.icon;
+
+  // Mathematically calculate the exact start time of the survey
+  const startTime = new Date(survey.timestamp.getTime() - (survey.duration * 1000));
 
   return (
     <Card className="bg-white dark:bg-[#0B1120] border border-slate-200 dark:border-slate-800 shadow-sm rounded-2xl overflow-hidden transition-all hover:border-slate-300 dark:hover:border-slate-700">
@@ -93,6 +96,29 @@ const SurveyAccordionCard = ({ survey, style, selectionMode, isSelected, onSelec
       <div className={`transition-all duration-300 ease-in-out ${isExpanded && !selectionMode ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
         <CardContent className="p-5 space-y-5">
           
+          {/* ⭐ NEW: Embedded "Started" Info Card */}
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100/50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                <PlayCircle className="size-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Survey Initiated</p>
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                  {startTime.toLocaleTimeString()}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+               <div className="text-right">
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Date</p>
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                    {startTime.toLocaleDateString()}
+                  </p>
+               </div>
+            </div>
+          </div>
+
           {survey.message && (
             <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800">
               <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{survey.message}</p>
@@ -173,7 +199,7 @@ const SurveyAccordionCard = ({ survey, style, selectionMode, isSelected, onSelec
 };
 
 export const HistoryScreen: React.FC = () => {
-  const { surveyHistory, logs, clearLogs, deleteSurveys } = useGNSS();
+  const { surveyHistory, logs, deleteSurveys, deleteLogs } = useGNSS();
   
   // Real-time terminal auto-scroll engine
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -182,13 +208,15 @@ export const HistoryScreen: React.FC = () => {
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logLevel, setLogLevel] = useState<'all' | 'error' | 'warning' | 'info'>('all');
 
-  // States for Survey Tab
+  // States for Survey Tab (Removed 'started' from default view type)
   const [surveySearchQuery, setSurveySearchQuery] = useState('');
-  const [surveyFilter, setSurveyFilter] = useState<'all' | 'started' | 'completed' | 'stopped' | 'error'>('all');
+  const [surveyFilter, setSurveyFilter] = useState<'all' | 'completed' | 'stopped' | 'error'>('all');
   
   // Selection States
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [logSelectionMode, setLogSelectionMode] = useState(false);
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
 
   // Filter Logic for Logs
   const filteredLogs = logs.filter((log) => {
@@ -201,6 +229,10 @@ export const HistoryScreen: React.FC = () => {
   const surveys = surveyHistory as Array<typeof surveyHistory[0] & { eventType?: string; message?: string }>;
   const filteredSurveys = surveys.filter((survey) => {
     const type = survey.eventType || (survey.success ? 'completed' : 'error');
+    
+    // ⭐ FORCE HIDE standalone 'started' events to prevent spam
+    if (type === 'started') return false; 
+
     const matchesFilter = surveyFilter === 'all' || type === surveyFilter;
     const matchesSearch = survey.id.toLowerCase().includes(surveySearchQuery.toLowerCase()) || 
                           (survey.message || '').toLowerCase().includes(surveySearchQuery.toLowerCase());
@@ -227,6 +259,25 @@ export const HistoryScreen: React.FC = () => {
     deleteSurveys(selectedIds);
     setSelectedIds([]);
     setSelectionMode(false);
+  };
+
+  const toggleLogSelection = (id: string) => {
+    setSelectedLogIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const handleSelectAllLogs = () => {
+    if (selectedLogIds.length === filteredLogs.length) {
+      setSelectedLogIds([]);
+    } else {
+      setSelectedLogIds(filteredLogs.map((l) => l.id));
+    }
+  };
+
+  const handleDeleteSelectedLogs = () => {
+    if (selectedLogIds.length === 0) return;
+    deleteLogs(selectedLogIds);
+    setSelectedLogIds([]);
+    setLogSelectionMode(false);
   };
 
   const normalizeFileName = (input: string, ext: string) => {
@@ -354,14 +405,6 @@ export const HistoryScreen: React.FC = () => {
   // Helper for Survey Event Styling
   const getSurveyStyles = (type: string) => {
     switch (type) {
-      case 'started':
-        return {
-          bg: 'bg-blue-50 dark:bg-blue-500/10',
-          border: 'border-blue-200 dark:border-blue-500/30',
-          text: 'text-blue-600 dark:text-blue-500',
-          icon: PlayCircle,
-          label: 'STARTED'
-        };
       case 'completed':
         return {
           bg: 'bg-emerald-50 dark:bg-emerald-500/10',
@@ -444,11 +487,11 @@ export const HistoryScreen: React.FC = () => {
                 {/* Dynamic Toolbar based on Selection Mode */}
                 {!selectionMode ? (
                   <div className="flex gap-2">
-                    <Button variant="outline" className="h-11 px-4 border-slate-200 dark:border-slate-800 font-semibold" onClick={handleExportSurveys}>
-                      <Download className="size-4 sm:mr-2" /> <span className="hidden sm:inline">Export</span>
+                    <Button variant="outline" className="flex-1 sm:flex-none h-11 px-5 gap-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-sm" onClick={handleExportSurveys}>
+                      <Download className="size-4" /> Export
                     </Button>
-                    <Button variant="outline" className="h-11 px-4 border-blue-200 dark:border-blue-900/50 text-blue-600 dark:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-semibold" onClick={() => setSelectionMode(true)}>
-                      <ListChecks className="size-4 sm:mr-2" /> <span className="hidden sm:inline">Select</span>
+                    <Button variant="outline" className="flex-1 sm:flex-none h-11 px-5 gap-2 border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 font-semibold text-sm" onClick={() => setSelectionMode(true)}>
+                      <Trash2 className="size-4" /> Delete
                     </Button>
                   </div>
                 ) : (
@@ -466,9 +509,9 @@ export const HistoryScreen: React.FC = () => {
                 )}
               </div>
 
-              {/* Survey State Filters */}
+              {/* Survey State Filters (Removed 'started') */}
               <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800/80">
-                {(['all', 'started', 'completed', 'stopped', 'error'] as const).map((level) => (
+                {(['all', 'completed', 'stopped', 'error'] as const).map((level) => (
                   <button 
                     key={level} 
                     onClick={() => setSurveyFilter(level)} 
@@ -528,9 +571,23 @@ export const HistoryScreen: React.FC = () => {
                   <Button variant="outline" className="flex-1 sm:flex-none h-11 px-5 gap-2 border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-sm" onClick={handleExportLogs}>
                     <Download className="size-4" /> Export
                   </Button>
-                  <Button variant="outline" className="flex-1 sm:flex-none h-11 px-5 gap-2 border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 font-semibold text-sm" onClick={clearLogs}>
-                    <Trash2 className="size-4" /> Clear
-                  </Button>
+                  {!logSelectionMode ? (
+                    <Button variant="outline" className="flex-1 sm:flex-none h-11 px-5 gap-2 border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 font-semibold text-sm" onClick={() => setLogSelectionMode(true)}>
+                      <Trash2 className="size-4" /> Delete
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" className="h-11 px-4 border-slate-200 dark:border-slate-800 font-semibold" onClick={handleSelectAllLogs}>
+                        {selectedLogIds.length === filteredLogs.length ? 'Deselect All' : 'Select All'}
+                      </Button>
+                      <Button variant="destructive" className="h-11 px-4 font-bold" onClick={handleDeleteSelectedLogs} disabled={selectedLogIds.length === 0}>
+                        <Trash2 className="size-4 sm:mr-2" /> <span className="hidden sm:inline">Delete ({selectedLogIds.length})</span>
+                      </Button>
+                      <Button variant="outline" className="h-11 px-3 border-slate-200 dark:border-slate-800" onClick={() => { setLogSelectionMode(false); setSelectedLogIds([]); }}>
+                        <X className="size-4" />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -556,6 +613,18 @@ export const HistoryScreen: React.FC = () => {
                   {/* Map logs oldest-to-newest so scrolling works naturally */}
                   {filteredLogs.slice().reverse().map((log) => (
                     <div key={log.id} className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-white dark:hover:bg-slate-900/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-800">
+                      {logSelectionMode && (
+                        <div
+                          onClick={() => toggleLogSelection(log.id)}
+                          className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
+                            selectedLogIds.includes(log.id)
+                              ? 'bg-red-600 border-red-600'
+                              : 'border-slate-300 dark:border-slate-600'
+                          }`}
+                        >
+                          {selectedLogIds.includes(log.id) && <CheckCircle2 className="size-3 text-white" />}
+                        </div>
+                      )}
                       <div className="mt-0.5 shrink-0">{getLevelIcon(log.level)}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center flex-wrap gap-2 mb-1">

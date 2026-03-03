@@ -1,4 +1,5 @@
-// import React, { useState, useEffect, useRef } from 'react';import { useGNSS } from '../../../context/GNSSContext';
+// import React, { useState, useEffect, useRef } from 'react';
+// import { useGNSS } from '../../../context/GNSSContext';
 // import { api } from '../../../api/gnssApi';
 // import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 // import { Button } from '../ui/button';
@@ -16,7 +17,9 @@
 //   Target,
 //   Satellite,
 //   Settings,
-//   Info
+//   Info,
+//   Radio, // Added for the NTRIP banner
+//   Activity // Added for the NTRIP banner
 // } from 'lucide-react';
 // import { toast } from 'sonner';
 // import { uiLogger } from '../../../utils/uiLogger';
@@ -28,7 +31,8 @@
 // }
 
 // export const SurveyStatus: React.FC = () => {
-//   const { survey, startSurvey, stopSurvey, configuration, gnssStatus } = useGNSS();
+//   // ⭐ Added 'streams' to the destructuring so we can access NTRIP data
+//   const { survey, startSurvey, stopSurvey, configuration, gnssStatus, streams } = useGNSS();
 //   const [coordinateFormat, setCoordinateFormat] = useState<'Global' | 'Local'>('Global');
 //   const [isLoading, setIsLoading] = useState(false);
 //   const [accuracyHistory, setAccuracyHistory] = useState<AccuracyRecord[]>([]);
@@ -81,7 +85,6 @@
 //       let finalY = survey.localCoordinates.meanY;
 //       let finalZ = survey.localCoordinates.meanZ;
 
-//       // ⭐ Fallback Math: If backend fails to send local coords, generate Easting/Northing manually via Web Mercator (EPSG:3857)
 //       if ((!finalX || isNaN(finalX) || finalX === 0) && (!finalY || isNaN(finalY) || finalY === 0) && lat !== 0 && lon !== 0) {
 //         finalX = (lon * 20037508.34) / 180;
 //         const rad = (lat * Math.PI) / 180;
@@ -89,7 +92,6 @@
 //         finalZ = alt;
 //       }
 
-//       // Strict validation so we never render "NaN"
 //       const isValidX = finalX !== undefined && finalX !== null && !isNaN(finalX) && finalX !== 0;
 //       const isValidY = finalY !== undefined && finalY !== null && !isNaN(finalY) && finalY !== 0;
 //       const isValidZ = finalZ !== undefined && finalZ !== null && !isNaN(finalZ) && finalZ !== 0;
@@ -204,7 +206,6 @@
 //           </div>
 //         </CardHeader>
 //         <CardContent className="space-y-6">
-//           {/* Circular Timer Progress */}
 //           <div className="flex items-center justify-center">
 //             <div className="relative">
 //               <svg className="size-48" viewBox="0 0 200 200">
@@ -238,9 +239,7 @@
 //             </div>
 //           </div>
 
-//           {/* Four Metrics Boxes */}
 //           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-//             {/* Box 1: Time Limit */}
 //             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
 //               <Clock className="size-5 mx-auto mb-2 text-blue-500" />
 //               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(requiredTimeSecs)}</div>
@@ -249,7 +248,6 @@
 //               </div>
 //             </div>
 
-//             {/* Box 2: Target */}
 //             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
 //               <Target className="size-5 mx-auto mb-2 text-emerald-500" />
 //               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
@@ -260,14 +258,12 @@
 //               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Target</div>
 //             </div>
 
-//             {/* Box 3: Satellites */}
 //             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
 //               <Satellite className="size-5 mx-auto mb-2 text-purple-500" />
 //               <div className="text-2xl font-bold text-slate-900 dark:text-slate-50">{survey.satelliteCount > 0 ? survey.satelliteCount : 'NIL'}</div>
 //               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Satellites</div>
 //             </div>
 
-//             {/* Box 4: Current Accuracy (Un-clamped Live Updates) */}
 //             <Dialog open={showAccuracyHistory} onOpenChange={setShowAccuracyHistory}>
 //               <DialogTrigger asChild>
 //                 <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
@@ -317,7 +313,6 @@
 //             </Dialog>
 //           </div>
 
-//           {/* Control Buttons */}
 //           <div className="flex gap-3">
 //             {!survey.isActive ? (
 //               <Button
@@ -343,7 +338,55 @@
 //         </CardContent>
 //       </Card>
 
-//       {/* Position Information Card - Rugged Controller UI */}
+//       {/* ⭐ NEW: Dashboard Live NTRIP Streaming Banner */}
+//       {streams?.ntrip?.active && (
+//         <div className="relative overflow-hidden rounded-xl border-2 border-emerald-500/50 bg-white dark:bg-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-in slide-in-from-bottom-4 fade-in zoom-in-95 duration-500">
+//           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 animate-[pulse_3s_ease-in-out_infinite]" />
+          
+//           <div className="relative p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+//             <div className="flex items-center gap-4">
+//                <div className="relative flex size-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] shrink-0">
+//                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+//                   <Radio className="size-6 relative z-10 animate-pulse" />
+//                </div>
+//                <div>
+//                   <div className="flex items-center gap-2">
+//                      <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-emerald-400 tracking-tight">LIVE NTRIP STREAM</h3>
+//                      <Badge variant="outline" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30 text-[9px] uppercase tracking-wider py-0">Broadcasting</Badge>
+//                   </div>
+//                   <p className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[200px] md:max-w-xs">
+//                     MOUNT: <span className="text-slate-800 dark:text-emerald-200">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
+//                   </p>
+//                </div>
+//             </div>
+
+//             <div className="flex items-center gap-6 justify-between md:justify-end bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800/80">
+//                <div>
+//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1"><Activity className="size-3 text-emerald-500" /> Speed</p>
+//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
+//                     {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB/s</span>
+//                   </p>
+//                </div>
+//                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
+//                <div>
+//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Sent</p>
+//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
+//                     {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB</span>
+//                   </p>
+//                </div>
+//                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 hidden sm:block" />
+//                <div className="hidden sm:block">
+//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Uptime</p>
+//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
+//                     {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
+//                   </p>
+//                </div>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Position Information Card */}
 //       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
 //         <CardHeader className="pb-4 border-b-2 border-slate-200 dark:border-slate-800">
 //           <div className="flex items-center justify-between">
@@ -448,6 +491,13 @@
 
 
 
+
+
+
+
+
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useGNSS } from '../../../context/GNSSContext';
 import { api } from '../../../api/gnssApi';
@@ -466,10 +516,7 @@ import {
   Clock,
   Target,
   Satellite,
-  Settings,
-  Info,
-  Radio, // Added for the NTRIP banner
-  Activity // Added for the NTRIP banner
+  Radio // Used for the simple live stream icon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uiLogger } from '../../../utils/uiLogger';
@@ -481,7 +528,6 @@ interface AccuracyRecord {
 }
 
 export const SurveyStatus: React.FC = () => {
-  // ⭐ Added 'streams' to the destructuring so we can access NTRIP data
   const { survey, startSurvey, stopSurvey, configuration, gnssStatus, streams } = useGNSS();
   const [coordinateFormat, setCoordinateFormat] = useState<'Global' | 'Local'>('Global');
   const [isLoading, setIsLoading] = useState(false);
@@ -642,7 +688,8 @@ export const SurveyStatus: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Survey Status Card */}
+      
+      {/* ── SURVEY STATUS CARD ── */}
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -693,17 +740,14 @@ export const SurveyStatus: React.FC = () => {
             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
               <Clock className="size-5 mx-auto mb-2 text-blue-500" />
               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(requiredTimeSecs)}</div>
-              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
-                Time Limit
-              </div>
+              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Time Limit</div>
             </div>
 
             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
               <Target className="size-5 mx-auto mb-2 text-emerald-500" />
               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
-                {parseFloat((
-                  (survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)
-                ).toFixed(0))}<span className="text-xs font-sans font-semibold text-slate-500 dark:text-slate-400 ml-1">cm</span>
+                {parseFloat(((survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)).toFixed(0))}
+                <span className="text-xs font-sans font-semibold text-slate-500 dark:text-slate-400 ml-1">cm</span>
               </div>
               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Target</div>
             </div>
@@ -730,9 +774,7 @@ export const SurveyStatus: React.FC = () => {
               <DialogContent className="max-w-md bg-white dark:bg-[#020617] border-slate-200 dark:border-slate-800">
                 <DialogHeader>
                   <DialogTitle className="text-slate-900 dark:text-slate-50">Accuracy History</DialogTitle>
-                  <DialogDescription className="text-slate-500 dark:text-slate-400">
-                    All accuracy attempts during this survey
-                  </DialogDescription>
+                  <DialogDescription className="text-slate-500 dark:text-slate-400">All accuracy attempts during this survey</DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="h-64 w-full">
                   <div className="space-y-2 p-4">
@@ -745,12 +787,8 @@ export const SurveyStatus: React.FC = () => {
                           }`}
                       >
                         <div>
-                          <div className={`font-mono font-bold ${record.isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
-                            {record.accuracy}cm
-                          </div>
-                          <div className={`text-xs ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
-                            {record.elapsedTime}
-                          </div>
+                          <div className={`font-mono font-bold ${record.isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>{record.accuracy}cm</div>
+                          <div className={`text-xs ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>{record.elapsedTime}</div>
                         </div>
                         <div className={`text-xs font-bold ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
                           {record.isSuccess ? '✓ Met' : '✗ Not Met'}
@@ -765,78 +803,68 @@ export const SurveyStatus: React.FC = () => {
 
           <div className="flex gap-3">
             {!survey.isActive ? (
-              <Button
-                onClick={handleStartSurvey}
-                className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={isLoading}
-              >
-                <Play className="size-4" />
-                Start Survey
+              <Button onClick={handleStartSurvey} className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white" disabled={isLoading}>
+                <Play className="size-4" /> Start Survey
               </Button>
             ) : (
-              <Button
-                onClick={handleStopSurvey}
-                variant="destructive"
-                className="flex-1 gap-2"
-                disabled={isLoading}
-              >
-                <Square className="size-4" />
-                Stop Survey
+              <Button onClick={handleStopSurvey} variant="destructive" className="flex-1 gap-2" disabled={isLoading}>
+                <Square className="size-4" /> Stop Survey
               </Button>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* ⭐ NEW: Dashboard Live NTRIP Streaming Banner */}
+      {/* ⭐ REDESIGNED: Simple, Elegant Live NTRIP Strip */}
       {streams?.ntrip?.active && (
-        <div className="relative overflow-hidden rounded-xl border-2 border-emerald-500/50 bg-white dark:bg-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-in slide-in-from-bottom-4 fade-in zoom-in-95 duration-500">
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 animate-[pulse_3s_ease-in-out_infinite]" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 md:px-6 rounded-2xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-500/10 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
           
-          <div className="relative p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-               <div className="relative flex size-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
-                  <Radio className="size-6 relative z-10 animate-pulse" />
-               </div>
-               <div>
-                  <div className="flex items-center gap-2">
-                     <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-emerald-400 tracking-tight">LIVE NTRIP STREAM</h3>
-                     <Badge variant="outline" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30 text-[9px] uppercase tracking-wider py-0">Broadcasting</Badge>
-                  </div>
-                  <p className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[200px] md:max-w-xs">
-                    MOUNT: <span className="text-slate-800 dark:text-emerald-200">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
-                  </p>
-               </div>
-            </div>
+          {/* Subtle top border moving light effect */}
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-emerald-400 dark:via-emerald-500 to-transparent opacity-70 animate-[pulse_2s_ease-in-out_infinite]" />
 
-            <div className="flex items-center gap-6 justify-between md:justify-end bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800/80">
-               <div>
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1"><Activity className="size-3 text-emerald-500" /> Speed</p>
-                  <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
-                    {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB/s</span>
-                  </p>
-               </div>
-               <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
-               <div>
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Sent</p>
-                  <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
-                    {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB</span>
-                  </p>
-               </div>
-               <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-               <div className="hidden sm:block">
-                  <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Uptime</p>
-                  <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
-                    {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
-                  </p>
-               </div>
+          {/* Left: Identity */}
+          <div className="flex items-center gap-3.5">
+            <div className="relative flex size-10 items-center justify-center rounded-full bg-emerald-200/50 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40"></span>
+              <Radio className="size-5 relative z-10" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wide leading-tight">
+                Broadcasting
+              </h3>
+              <p className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-400/80 mt-0.5 leading-none">
+                MOUNT: {streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}
+              </p>
+            </div>
+          </div>
+
+          {/* Right: Clean Metrics */}
+          <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-emerald-200/50 dark:border-emerald-800/50 pt-3 sm:pt-0">
+            <div className="text-center sm:text-right">
+              <p className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-0.5">Speed</p>
+              <p className="font-mono text-sm sm:text-base font-bold text-emerald-900 dark:text-emerald-100">
+                {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[9px] ml-0.5 font-sans font-medium text-emerald-700/70 dark:text-emerald-300/60">KB/s</span>
+              </p>
+            </div>
+            <div className="w-px h-6 sm:h-8 bg-emerald-200/60 dark:bg-emerald-800/60" />
+            <div className="text-center sm:text-right">
+              <p className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-0.5">Sent</p>
+              <p className="font-mono text-sm sm:text-base font-bold text-emerald-900 dark:text-emerald-100">
+                {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[9px] ml-0.5 font-sans font-medium text-emerald-700/70 dark:text-emerald-300/60">KB</span>
+              </p>
+            </div>
+            <div className="w-px h-6 sm:h-8 bg-emerald-200/60 dark:bg-emerald-800/60" />
+            <div className="text-center sm:text-right">
+              <p className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-0.5">Uptime</p>
+              <p className="font-mono text-sm sm:text-base font-bold text-emerald-900 dark:text-emerald-100">
+                {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Position Information Card */}
+      {/* ── POSITION DATA CARD ── */}
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
         <CardHeader className="pb-4 border-b-2 border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between">
