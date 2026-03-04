@@ -36,7 +36,7 @@ export const SettingsScreen: React.FC = () => {
     'flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 transition-colors hover:border-slate-300 dark:hover:border-slate-700';
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto min-h-screen animate-in fade-in duration-500 pb-24">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto min-h-full animate-in fade-in duration-500 pb-6 md:pb-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 border-b border-slate-200 dark:border-slate-800 pb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50 tracking-tight">App Settings</h1>

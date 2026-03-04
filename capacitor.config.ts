@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.rtk.app",
-  appName: "RTK",
+  appName: "Base",
   webDir: "dist",
 
   server: {
@@ -12,4 +12,3 @@ const config: CapacitorConfig = {
 };
 
 export default config;
-

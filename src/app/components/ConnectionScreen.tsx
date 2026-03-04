@@ -143,7 +143,7 @@ export const ConnectionScreen: React.FC = () => {
   const techLabel = "text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.25em]";
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] transition-colors duration-700 flex flex-col items-center justify-start lg:justify-center p-4 md:p-6 lg:p-10 pt-safe overflow-hidden">
+    <div className="min-h-dvh safe-x bg-slate-50 dark:bg-[#020617] transition-colors duration-700 flex flex-col items-center justify-start lg:justify-center p-4 md:p-6 lg:p-10 pt-safe overflow-hidden">
       
       <div className="lg:hidden w-full flex items-center justify-between mb-6 px-2 animate-in fade-in slide-in-from-top-4">
         <div className="flex items-center gap-3">
@@ -418,7 +418,7 @@ export const ConnectionScreen: React.FC = () => {
            </Card>
         </div>
 
-        <div className="lg:hidden fixed bottom-safe-offset left-6 right-6 z-50">
+        <div className="lg:hidden fixed floating-safe-frame z-50">
            <div className="bg-slate-900/90 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/10 p-2 rounded-[2.5rem] shadow-2xl flex items-center justify-between gap-2 ring-1 ring-white/20">
               {[
                 { id: 'auto', icon: Radar, label: 'AUTO' },

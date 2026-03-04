@@ -444,7 +444,7 @@ export const HistoryScreen: React.FC = () => {
   const inputClasses = "h-11 text-sm font-medium bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:border-blue-500 transition-colors text-slate-900 dark:text-slate-100 shadow-sm";
 
   return (
-    <div className="p-4 md:p-8 max-w-[1400px] mx-auto min-h-screen animate-in fade-in duration-300 pb-24">
+    <div className="p-4 md:p-8 max-w-[1400px] mx-auto min-h-full animate-in fade-in duration-300 pb-6 md:pb-8">
       
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-slate-200 dark:border-slate-800 pb-5">

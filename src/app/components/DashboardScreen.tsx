@@ -9,7 +9,7 @@ export const DashboardScreen: React.FC = () => {
 
   return (
     // Light: Soft clean slate | Dark: Deep navy/slate-950
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 font-sans transition-colors duration-300">
+    <div className="min-h-full bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 font-sans transition-colors duration-300">
       <div className="max-w-[1400px] mx-auto p-6 md:p-8 md:pt-10">
 
         {/* Top Navigation & Header Row */}

@@ -516,7 +516,9 @@ import {
   Clock,
   Target,
   Satellite,
-  Radio // Used for the simple live stream icon
+  Radio, 
+  Activity, 
+  RefreshCw // Added for the minimal spinner
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uiLogger } from '../../../utils/uiLogger';
@@ -815,53 +817,66 @@ export const SurveyStatus: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* ⭐ REDESIGNED: Simple, Elegant Live NTRIP Strip */}
+      {/* ⭐ MINIMAL, TECHNICAL NTRIP STATUS STRIP */}
       {streams?.ntrip?.active && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 md:px-6 rounded-2xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-500/10 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
           
-          {/* Subtle top border moving light effect */}
-          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-emerald-400 dark:via-emerald-500 to-transparent opacity-70 animate-[pulse_2s_ease-in-out_infinite]" />
+          {/* Subtle loading bar running continuously along the top border */}
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div className="h-full bg-blue-500 w-1/3 animate-[translateX_2s_ease-in-out_infinite]" />
+          </div>
 
-          {/* Left: Identity */}
-          <div className="flex items-center gap-3.5">
-            <div className="relative flex size-10 items-center justify-center rounded-full bg-emerald-200/50 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40"></span>
-              <Radio className="size-5 relative z-10" />
+          <div className="p-4 md:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            
+            {/* Left side: Identity & Status */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center p-2.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+                <Radio className="size-5" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">NTRIP Broadcasting</h3>
+                  <RefreshCw className="size-3 text-slate-400 animate-spin duration-3000" />
+                </div>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  MOUNT: <span className="font-semibold text-slate-700 dark:text-slate-300">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wide leading-tight">
-                Broadcasting
-              </h3>
-              <p className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-400/80 mt-0.5 leading-none">
-                MOUNT: {streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}
-              </p>
+
+            {/* Right side: Clean Data Readout */}
+            <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto border-t sm:border-t-0 border-slate-100 dark:border-slate-800 pt-3 sm:pt-0 justify-between sm:justify-end">
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Speed</p>
+                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[9px] ml-0.5 text-slate-500">KB/s</span>
+                </p>
+              </div>
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-800" />
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Tx Total</p>
+                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[9px] ml-0.5 text-slate-500">KB</span>
+                </p>
+              </div>
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-800" />
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Uptime</p>
+                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Right: Clean Metrics */}
-          <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-emerald-200/50 dark:border-emerald-800/50 pt-3 sm:pt-0">
-            <div className="text-center sm:text-right">
-              <p className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-0.5">Speed</p>
-              <p className="font-mono text-sm sm:text-base font-bold text-emerald-900 dark:text-emerald-100">
-                {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[9px] ml-0.5 font-sans font-medium text-emerald-700/70 dark:text-emerald-300/60">KB/s</span>
-              </p>
-            </div>
-            <div className="w-px h-6 sm:h-8 bg-emerald-200/60 dark:bg-emerald-800/60" />
-            <div className="text-center sm:text-right">
-              <p className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-0.5">Sent</p>
-              <p className="font-mono text-sm sm:text-base font-bold text-emerald-900 dark:text-emerald-100">
-                {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[9px] ml-0.5 font-sans font-medium text-emerald-700/70 dark:text-emerald-300/60">KB</span>
-              </p>
-            </div>
-            <div className="w-px h-6 sm:h-8 bg-emerald-200/60 dark:bg-emerald-800/60" />
-            <div className="text-center sm:text-right">
-              <p className="text-[9px] font-bold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-0.5">Uptime</p>
-              <p className="font-mono text-sm sm:text-base font-bold text-emerald-900 dark:text-emerald-100">
-                {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
-              </p>
-            </div>
-          </div>
-        </div>
+          {/* Add the custom keyframe for the top loading bar if you don't have it in your global CSS */}
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes translateX {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(300%); }
+            }
+          `}} />
+        </Card>
       )}
 
       {/* ── POSITION DATA CARD ── */}

@@ -458,7 +458,7 @@ const AppContent: React.FC = () => {
   // If not connected and no active survey, block rendering of the internal app structure
   if (!connection.isConnected && !survey.isActive) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 transition-colors duration-300">
+      <div className="min-h-dvh safe-x bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 transition-colors duration-300">
         <div key="connection-screen" className="animate-in fade-in zoom-in-[0.99] duration-200 ease-out">
           <ConnectionScreen />
         </div>
@@ -468,10 +468,10 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 flex overflow-hidden transition-colors duration-300">
+    <div className="h-dvh bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-50 flex overflow-hidden transition-colors duration-300">
 
       {/* ── Desktop Sidebar (Fixed Left) ── */}
-      <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-50">
+      <aside className="hidden md:flex flex-col w-64 h-screen fixed desktop-sidebar-safe bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-50">
         <div className="p-6">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 dark:from-blue-400 dark:to-cyan-300 bg-clip-text text-transparent">
             GNSS Base Station
@@ -512,7 +512,7 @@ const AppContent: React.FC = () => {
       </aside>
 
       {/* ── Mobile Header (Fixed Top) ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-50 pt-safe">
+      <div className="md:hidden fixed top-0 mobile-fixed-safe bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 z-50 pt-safe">
         <div className="flex items-center justify-between px-5 py-3">
           <div>
             <h1 className="font-bold text-lg bg-gradient-to-r from-blue-600 to-cyan-500 dark:from-blue-400 dark:to-cyan-300 bg-clip-text text-transparent">
@@ -534,7 +534,7 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* ── Mobile Interactive Bottom Navbar ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-[#020617]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 mobile-nav-safe">
+      <nav className="md:hidden fixed bottom-0 mobile-fixed-safe z-50 bg-white/90 dark:bg-[#020617]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 mobile-nav-safe">
         <div className="flex items-center justify-between px-3 py-2.5 gap-1">
           {navItems.map((item) => {
             const isActive = currentScreen === item.id;
@@ -563,10 +563,10 @@ const AppContent: React.FC = () => {
       </nav>
 
       {/* ── Main Content Area ── */}
-      <main className="flex-1 overflow-y-auto md:ml-64 mt-[calc(env(safe-area-inset-top,0px)+72px)] mobile-main-safe md:mt-0 md:mb-0 overflow-x-hidden">
+      <main className="flex-1 overflow-y-auto mt-[calc(env(safe-area-inset-top,0px)+72px)] mobile-main-safe desktop-main-safe md:mt-0 md:mb-0 overflow-x-hidden">
         <div 
           key={currentScreen} 
-          className="animate-in fade-in slide-in-from-bottom-8 duration-500 ease-out h-full"
+          className="animate-in fade-in slide-in-from-bottom-8 duration-500 ease-out"
         >
           {renderScreen()}
         </div>
