@@ -423,15 +423,6 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('navigate-to-configuration', handleNavigation);
   }, []);
 
-  // Listen for history navigation clicks (e.g. dashboard recent history card)
-  useEffect(() => {
-    const handleNavigation = () => {
-      handleScreenChange('history');
-    };
-    window.addEventListener('navigate-to-history', handleNavigation);
-    return () => window.removeEventListener('navigate-to-history', handleNavigation);
-  }, []);
-
   const navItems = [
     { id: 'dashboard' as Screen, label: 'Dashboard', shortLabel: 'Home', icon: Home },
     { id: 'configuration' as Screen, label: 'Configuration', shortLabel: 'Config', icon: Settings },

@@ -1,0 +1,1373 @@
+// import React, { useState, useEffect, useRef } from 'react';
+// import { useGNSS } from '../../../context/GNSSContext';
+// import { api } from '../../../api/gnssApi';
+// import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+// import { Button } from '../ui/button';
+// import { Badge } from '../ui/badge';
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+// import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+// import { ScrollArea } from '../ui/scroll-area';
+// import {
+//   Play,
+//   Square,
+//   MapPin,
+//   Copy,
+//   CheckCircle2,
+//   Clock,
+//   Target,
+//   Satellite,
+//   Settings,
+//   Info,
+//   Radio, // Added for the NTRIP banner
+//   Activity // Added for the NTRIP banner
+// } from 'lucide-react';
+// import { toast } from 'sonner';
+// import { uiLogger } from '../../../utils/uiLogger';
+
+// interface AccuracyRecord {
+//   accuracy: number;
+//   elapsedTime: string;
+//   isSuccess: boolean;
+// }
+
+// export const SurveyStatus: React.FC = () => {
+//   // ⭐ Added 'streams' to the destructuring so we can access NTRIP data
+//   const { survey, startSurvey, stopSurvey, configuration, gnssStatus, streams } = useGNSS();
+//   const [coordinateFormat, setCoordinateFormat] = useState<'Global' | 'Local'>('Global');
+//   const [isLoading, setIsLoading] = useState(false);
+//   const [accuracyHistory, setAccuracyHistory] = useState<AccuracyRecord[]>([]);
+//   const [finalAccuracyRecord, setFinalAccuracyRecord] = useState<AccuracyRecord | null>(null);
+//   const [showAccuracyHistory, setShowAccuracyHistory] = useState(false);
+//   const [progressPercentage, setProgressPercentage] = useState(0);
+//   const hasMetTargetAccuracy = survey.currentAccuracy > 0 && survey.currentAccuracy <= survey.targetAccuracy;
+//   const showFixedIndicators = !survey.isActive && survey.status !== 'stopped' && hasMetTargetAccuracy;
+
+//   const requiredTimeSecs = survey.isActive ? survey.requiredTime : configuration.baseStation.surveyDuration;
+//   const clampedElapsedTime = Math.min(survey.elapsedTime, requiredTimeSecs);
+
+//   useEffect(() => {
+//     const percentage = requiredTimeSecs > 0
+//       ? Math.min((clampedElapsedTime / requiredTimeSecs) * 100, 100)
+//       : 0;
+//     setProgressPercentage(percentage);
+//   }, [clampedElapsedTime, requiredTimeSecs]);
+
+//   const surveWasActiveRef = useRef(false);
+//   useEffect(() => {
+//     if (!survey.isActive && surveWasActiveRef.current === true) {
+//       uiLogger.log('Survey ended', 'SurveyStatus', {
+//         finalAccuracy: survey.currentAccuracy,
+//         duration: survey.elapsedTime,
+//       });
+//     }
+//     surveWasActiveRef.current = survey.isActive;
+//   }, [survey.isActive, survey.currentAccuracy, survey.elapsedTime]);
+
+//   const formatTime = (seconds: number) => {
+//     const mins = Math.floor(seconds / 60);
+//     const secs = seconds % 60;
+//     return `${mins}:${secs.toString().padStart(2, '0')}`;
+//   };
+
+//   const formatCoordinate = () => {
+//     const lat = gnssStatus.globalPosition.latitude || survey.position.latitude;
+//     const lon = gnssStatus.globalPosition.longitude || survey.position.longitude;
+//     const alt = gnssStatus.globalPosition.altitude || survey.position.altitude;
+
+//     if (coordinateFormat === 'Global') {
+//       return {
+//         lat: lat && !isNaN(lat) && lat !== 0 ? lat.toFixed(8) : 'NIL',
+//         lon: lon && !isNaN(lon) && lon !== 0 ? lon.toFixed(8) : 'NIL',
+//         alt: alt && !isNaN(alt) && alt !== 0 ? alt.toFixed(3) : 'NIL',
+//       };
+//     } else {
+//       let finalX = survey.localCoordinates.meanX;
+//       let finalY = survey.localCoordinates.meanY;
+//       let finalZ = survey.localCoordinates.meanZ;
+
+//       if ((!finalX || isNaN(finalX) || finalX === 0) && (!finalY || isNaN(finalY) || finalY === 0) && lat !== 0 && lon !== 0) {
+//         finalX = (lon * 20037508.34) / 180;
+//         const rad = (lat * Math.PI) / 180;
+//         finalY = (Math.log(Math.tan((Math.PI / 4) + (rad / 2))) * (20037508.34 / Math.PI));
+//         finalZ = alt;
+//       }
+
+//       const isValidX = finalX !== undefined && finalX !== null && !isNaN(finalX) && finalX !== 0;
+//       const isValidY = finalY !== undefined && finalY !== null && !isNaN(finalY) && finalY !== 0;
+//       const isValidZ = finalZ !== undefined && finalZ !== null && !isNaN(finalZ) && finalZ !== 0;
+
+//       return {
+//         lat: isValidX ? finalX.toFixed(4) : 'NIL',
+//         lon: isValidY ? finalY.toFixed(4) : 'NIL',
+//         alt: isValidZ ? finalZ.toFixed(4) : 'NIL',
+//       };
+//     }
+//   };
+
+//   const coords = formatCoordinate();
+
+//   const copyCoordinates = () => {
+//     const coordText = `${coordinateFormat}: Lat/X: ${coords.lat}, Lon/Y: ${coords.lon}, Alt/Z: ${coords.alt}m`;
+//     navigator.clipboard.writeText(coordText);
+//     uiLogger.log('Copy Coordinates', 'SurveyStatus', coordText);
+//     toast.success('Coordinates copied to clipboard');
+//   };
+
+//   const handleStartSurvey = async () => {
+//     try {
+//       setIsLoading(true);
+//       setAccuracyHistory([]);
+//       setFinalAccuracyRecord(null);
+//       uiLogger.log('Start Survey Button Clicked', 'SurveyStatus', {
+//         duration: configuration.baseStation.surveyDuration,
+//         accuracy: configuration.baseStation.accuracyThreshold,
+//       });
+
+//       await startSurvey();
+
+//       uiLogger.log('Survey Started Successfully', 'SurveyStatus');
+//       toast.success('Survey started');
+
+//       setTimeout(() => {
+//         setIsLoading(false);
+//       }, 100);
+//     } catch (error) {
+//       const errorMsg = error instanceof Error ? error.message : String(error);
+//       uiLogger.log('Start Survey Failed', 'SurveyStatus', undefined, errorMsg);
+//       toast.error(`Failed to start survey: ${errorMsg}`);
+//       setIsLoading(false);
+//     }
+//   };
+
+//   const handleStopSurvey = async () => {
+//     try {
+//       setIsLoading(true);
+//       uiLogger.log('Stop Survey Button Clicked', 'SurveyStatus', {
+//         elapsedTime: survey.elapsedTime,
+//         accuracy: `${(survey.currentAccuracy).toFixed(1)}cm`,
+//       });
+
+//       await stopSurvey();
+
+//       uiLogger.log('Survey Stopped Successfully', 'SurveyStatus');
+//       toast.success('Survey stopped');
+//     } catch (error) {
+//       const errorMsg = error instanceof Error ? error.message : String(error);
+//       uiLogger.log('Stop Survey Failed', 'SurveyStatus', undefined, errorMsg);
+//       toast.error(`Failed to stop survey: ${errorMsg}`);
+//     } finally {
+//       setIsLoading(false);
+//     }
+//   };
+
+//   const getDisplayStatus = () => {
+//     if (survey.isActive) return 'In Progress';
+//     if (survey.status === 'stopped') return 'Stopped';
+//     if (showFixedIndicators) return 'Position Fixed';
+//     return 'Idle';
+//   };
+
+//   const getStatusBadgeColor = () => {
+//     if (survey.isActive) return survey.status === 'initializing' ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white';
+//     if (survey.status === 'stopped') return 'bg-red-500 text-white';
+//     if (showFixedIndicators) return 'bg-emerald-500 text-white';
+//     return 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+//   };
+
+//   const lockedAccuracy = useRef<number>(0);
+//   const lockedTime = useRef<number>(0);
+
+//   useEffect(() => {
+//     if (!survey.isActive && clampedElapsedTime > 0) {
+//       lockedAccuracy.current = survey.currentAccuracy;
+//       lockedTime.current = clampedElapsedTime; 
+//     } else if (survey.isActive) {
+//       lockedAccuracy.current = 0;
+//       lockedTime.current = 0;
+//     }
+//   }, [survey.isActive, survey.currentAccuracy, clampedElapsedTime]);
+
+//   const displayAccuracy = !survey.isActive && lockedAccuracy.current > 0 ? lockedAccuracy.current : survey.currentAccuracy;
+//   const finalDisplayTime = !survey.isActive && lockedTime.current > 0 ? lockedTime.current : clampedElapsedTime;
+
+//   return (
+//     <div className="space-y-6">
+//       {/* Survey Status Card */}
+//       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+//         <CardHeader>
+//           <div className="flex items-center justify-between">
+//             <div>
+//               <CardTitle className="text-slate-900 dark:text-slate-50">Survey Status</CardTitle>
+//               <CardDescription className="text-slate-500 dark:text-slate-400">Real-time survey-in mode monitoring</CardDescription>
+//             </div>
+//             <Badge className={`${getStatusBadgeColor()} border-none shadow-none`}>
+//               {getDisplayStatus()}
+//             </Badge>
+//           </div>
+//         </CardHeader>
+//         <CardContent className="space-y-6">
+//           <div className="flex items-center justify-center">
+//             <div className="relative">
+//               <svg className="size-48" viewBox="0 0 200 200">
+//                 <circle
+//                   cx="100"
+//                   cy="100"
+//                   r="85"
+//                   fill="none"
+//                   stroke="currentColor"
+//                   strokeWidth="10"
+//                   className="text-slate-100 dark:text-slate-800"
+//                 />
+//                 <circle
+//                   cx="100"
+//                   cy="100"
+//                   r="85"
+//                   fill="none"
+//                   stroke="currentColor"
+//                   strokeWidth="10"
+//                   strokeLinecap="round"
+//                   className={progressPercentage >= 100 ? 'text-emerald-500' : 'text-blue-500'}
+//                   strokeDasharray={`${(progressPercentage / 100) * 534.07} 534.07`}
+//                   transform="rotate(-90 100 100)"
+//                   style={{ transition: 'stroke-dasharray 0.3s ease' }}
+//                 />
+//               </svg>
+//               <div className="absolute inset-0 flex flex-col items-center justify-center">
+//                 <span className="text-4xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(finalDisplayTime)}</span>
+//                 <span className="text-sm font-medium text-slate-500 dark:text-slate-400">/ {formatTime(requiredTimeSecs)}</span>
+//               </div>
+//             </div>
+//           </div>
+
+//           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+//             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
+//               <Clock className="size-5 mx-auto mb-2 text-blue-500" />
+//               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(requiredTimeSecs)}</div>
+//               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
+//                 Time Limit
+//               </div>
+//             </div>
+
+//             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
+//               <Target className="size-5 mx-auto mb-2 text-emerald-500" />
+//               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
+//                 {parseFloat((
+//                   (survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)
+//                 ).toFixed(0))}<span className="text-xs font-sans font-semibold text-slate-500 dark:text-slate-400 ml-1">cm</span>
+//               </div>
+//               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Target</div>
+//             </div>
+
+//             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
+//               <Satellite className="size-5 mx-auto mb-2 text-purple-500" />
+//               <div className="text-2xl font-bold text-slate-900 dark:text-slate-50">{survey.satelliteCount > 0 ? survey.satelliteCount : 'NIL'}</div>
+//               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Satellites</div>
+//             </div>
+
+//             <Dialog open={showAccuracyHistory} onOpenChange={setShowAccuracyHistory}>
+//               <DialogTrigger asChild>
+//                 <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+//                   <CheckCircle2 className="size-5 mx-auto mb-2 text-orange-500" />
+//                   <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-500">
+//                     {displayAccuracy > 0 ? parseFloat((displayAccuracy).toFixed(1)) : 'NIL'}
+//                     {displayAccuracy > 0 && <span className="text-xs font-sans font-semibold ml-1">cm</span>}
+//                   </div>
+//                   <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
+//                     {accuracyHistory.length > 1 ? 'Accuracy (Click)' : 'Accuracy'}
+//                   </div>
+//                 </div>
+//               </DialogTrigger>
+//               <DialogContent className="max-w-md bg-white dark:bg-[#020617] border-slate-200 dark:border-slate-800">
+//                 <DialogHeader>
+//                   <DialogTitle className="text-slate-900 dark:text-slate-50">Accuracy History</DialogTitle>
+//                   <DialogDescription className="text-slate-500 dark:text-slate-400">
+//                     All accuracy attempts during this survey
+//                   </DialogDescription>
+//                 </DialogHeader>
+//                 <ScrollArea className="h-64 w-full">
+//                   <div className="space-y-2 p-4">
+//                     {accuracyHistory.map((record, idx) => (
+//                       <div
+//                         key={idx}
+//                         className={`flex justify-between items-center p-3 rounded-lg ${record.isSuccess
+//                             ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20'
+//                             : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20'
+//                           }`}
+//                       >
+//                         <div>
+//                           <div className={`font-mono font-bold ${record.isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+//                             {record.accuracy}cm
+//                           </div>
+//                           <div className={`text-xs ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+//                             {record.elapsedTime}
+//                           </div>
+//                         </div>
+//                         <div className={`text-xs font-bold ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+//                           {record.isSuccess ? '✓ Met' : '✗ Not Met'}
+//                         </div>
+//                       </div>
+//                     ))}
+//                   </div>
+//                 </ScrollArea>
+//               </DialogContent>
+//             </Dialog>
+//           </div>
+
+//           <div className="flex gap-3">
+//             {!survey.isActive ? (
+//               <Button
+//                 onClick={handleStartSurvey}
+//                 className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+//                 disabled={isLoading}
+//               >
+//                 <Play className="size-4" />
+//                 Start Survey
+//               </Button>
+//             ) : (
+//               <Button
+//                 onClick={handleStopSurvey}
+//                 variant="destructive"
+//                 className="flex-1 gap-2"
+//                 disabled={isLoading}
+//               >
+//                 <Square className="size-4" />
+//                 Stop Survey
+//               </Button>
+//             )}
+//           </div>
+//         </CardContent>
+//       </Card>
+
+//       {/* ⭐ NEW: Dashboard Live NTRIP Streaming Banner */}
+//       {streams?.ntrip?.active && (
+//         <div className="relative overflow-hidden rounded-xl border-2 border-emerald-500/50 bg-white dark:bg-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-in slide-in-from-bottom-4 fade-in zoom-in-95 duration-500">
+//           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 animate-[pulse_3s_ease-in-out_infinite]" />
+          
+//           <div className="relative p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+//             <div className="flex items-center gap-4">
+//                <div className="relative flex size-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] shrink-0">
+//                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+//                   <Radio className="size-6 relative z-10 animate-pulse" />
+//                </div>
+//                <div>
+//                   <div className="flex items-center gap-2">
+//                      <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-emerald-400 tracking-tight">LIVE NTRIP STREAM</h3>
+//                      <Badge variant="outline" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30 text-[9px] uppercase tracking-wider py-0">Broadcasting</Badge>
+//                   </div>
+//                   <p className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[200px] md:max-w-xs">
+//                     MOUNT: <span className="text-slate-800 dark:text-emerald-200">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
+//                   </p>
+//                </div>
+//             </div>
+
+//             <div className="flex items-center gap-6 justify-between md:justify-end bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800/80">
+//                <div>
+//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1"><Activity className="size-3 text-emerald-500" /> Speed</p>
+//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
+//                     {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB/s</span>
+//                   </p>
+//                </div>
+//                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
+//                <div>
+//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Sent</p>
+//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
+//                     {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB</span>
+//                   </p>
+//                </div>
+//                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 hidden sm:block" />
+//                <div className="hidden sm:block">
+//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Uptime</p>
+//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
+//                     {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
+//                   </p>
+//                </div>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Position Information Card */}
+//       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
+//         <CardHeader className="pb-4 border-b-2 border-slate-200 dark:border-slate-800">
+//           <div className="flex items-center justify-between">
+//             <div className="flex items-center gap-3">
+//               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+//                 <MapPin className="size-5" />
+//               </div>
+//               <div>
+//                 <CardTitle className="text-base text-slate-900 dark:text-slate-50 uppercase tracking-wide">Position Data</CardTitle>
+//                 <CardDescription className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+//                   {coordinateFormat === 'Global' ? 'GLOBAL_GNSS_RX' : 'LOCAL_SURVEY_PROC'}
+//                 </CardDescription>
+//               </div>
+//             </div>
+//             <div className="flex flex-col items-end gap-2">
+//               {showFixedIndicators && (
+//                 <Badge className="bg-emerald-500 text-white border-none gap-1.5 px-2 py-0.5 rounded-full text-[10px]">
+//                   <span className="size-1.5 bg-white rounded-full animate-pulse" />
+//                   RTK FIXED
+//                 </Badge>
+//               )}
+//               <div className="text-[11px] font-mono font-bold text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-800">
+//                 ±{survey.position.accuracy > 0 ? survey.position.accuracy.toFixed(3) : 'NIL'}m
+//               </div>
+//             </div>
+//           </div>
+//         </CardHeader>
+        
+//         <CardContent className="p-5 space-y-5">
+//           <Tabs value={coordinateFormat} onValueChange={(v) => setCoordinateFormat(v as any)}>
+//             <TabsList className="grid w-full grid-cols-2 p-1 bg-slate-200 dark:bg-slate-800 rounded-lg">
+//               <TabsTrigger value="Global" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold">GLOBAL</TabsTrigger>
+//               <TabsTrigger value="Local" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold">LOCAL</TabsTrigger>
+//             </TabsList>
+//           </Tabs>
+
+//           <div className="bg-white dark:bg-black rounded-xl border-2 border-slate-200 dark:border-slate-800 p-1 font-mono overflow-hidden">
+//             <div className="grid grid-cols-1 divide-y-2 divide-slate-100 dark:divide-slate-900">
+              
+//               <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+//                 <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
+//                   {coordinateFormat === 'Global' ? 'LAT' : 'EAST (X)'}
+//                 </div>
+//                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{coords.lat}</div>
+//               </div>
+
+//               <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+//                 <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
+//                   {coordinateFormat === 'Global' ? 'LON' : 'NORTH (Y)'}
+//                 </div>
+//                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{coords.lon}</div>
+//               </div>
+
+//               <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors bg-slate-50 dark:bg-slate-900/30">
+//                 <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
+//                   {coordinateFormat === 'Global' ? 'ALT (MSL)' : 'HEIGHT (Z)'}
+//                 </div>
+//                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+//                   {coords.alt} <span className="text-xs text-slate-500 font-normal">m</span>
+//                 </div>
+//               </div>
+
+//             </div>
+//           </div>
+
+//           <Button 
+//             variant="default" 
+//             className="w-full gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 rounded-xl h-10 font-bold text-xs transition-transform active:scale-95" 
+//             onClick={copyCoordinates}
+//           >
+//             <Copy className="size-4" />
+//             COPY TO CLIPBOARD
+//           </Button>
+//         </CardContent>
+//       </Card>
+//     </div>
+//   );
+// };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useGNSS } from '../../../context/GNSSContext';
+import { api } from '../../../api/gnssApiDynamic';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { ScrollArea } from '../ui/scroll-area';
+import {
+  Play,
+  Square,
+  MapPin,
+  CheckCircle2,
+  Clock,
+  Target,
+  Satellite,
+  Radio, 
+  Activity, 
+  Download,
+  RefreshCw // Added for the minimal spinner
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { uiLogger } from '../../../utils/uiLogger';
+
+interface AccuracyRecord {
+  accuracy: number;
+  elapsedTime: string;
+  isSuccess: boolean;
+}
+
+export const SurveyStatus: React.FC = () => {
+  const {
+    survey,
+    startSurvey,
+    stopSurvey,
+    configuration,
+    gnssStatus,
+    streams,
+    isAutoFlowActive,
+    isAutoFlowSessionActive,
+    autoFlowRuntime,
+    savedBasePosition,
+    confirmResurvey,
+    skipResurvey,
+  } = useGNSS();
+  const [coordinateFormat, setCoordinateFormat] = useState<'Global' | 'Local'>('Global');
+  const [isLoading, setIsLoading] = useState(false);
+  const [accuracyHistory, setAccuracyHistory] = useState<AccuracyRecord[]>([]);
+  const [finalAccuracyRecord, setFinalAccuracyRecord] = useState<AccuracyRecord | null>(null);
+  const [showAccuracyHistory, setShowAccuracyHistory] = useState(false);
+  const [displayElapsedTime, setDisplayElapsedTime] = useState(0);
+  const [smoothElapsedTime, setSmoothElapsedTime] = useState(0);
+  const [confirmCountdown, setConfirmCountdown] = useState<number | null>(null);
+  const [pendingAction, setPendingAction] = useState<'start' | 'stop' | 'decision' | null>(null);
+  const prevIsActiveRef = useRef(survey.isActive);
+  const prevStatusRef = useRef(survey.status);
+  const startToastIdRef = useRef<string>('survey-start-loading');
+  const isStartToastOpenRef = useRef(false);
+  const [progressPercentage, setProgressPercentage] = useState(0);
+  const surveyStartedAtRef = useRef<number | null>(null);
+  const hasMetTargetAccuracy = survey.valid || (survey.currentAccuracy > 0 && survey.currentAccuracy <= survey.targetAccuracy);
+  const showFixedIndicators = !survey.isActive && survey.status !== 'stopped' && hasMetTargetAccuracy;
+  const hasAutoFlowControl = isAutoFlowActive || isAutoFlowSessionActive;
+  const isNtripStreaming = streams.ntrip.active;
+  const isStreamingConnected = isNtripStreaming || (streams.ntrip.enabled && hasAutoFlowControl);
+  const showBaseFixedBanner = Boolean(savedBasePosition) && !autoFlowRuntime.isAwaitingConfirm && !survey.isActive;
+  const shouldShowStreamingState = isNtripStreaming && !survey.isActive;
+  const isFixedBaseState = showBaseFixedBanner || showFixedIndicators;
+  const shouldShowStartLoadingToast =
+    pendingAction === 'start' &&
+    survey.status === 'initializing' &&
+    !survey.isActive &&
+    !shouldShowStreamingState &&
+    !isFixedBaseState &&
+    !autoFlowRuntime.isAwaitingConfirm;
+  const shouldShowStopButton = !autoFlowRuntime.isAwaitingConfirm && (
+    survey.isActive ||
+    survey.status === 'initializing' ||
+    hasAutoFlowControl ||
+    isStreamingConnected
+  );
+
+  const requiredTimeSecs = survey.requiredTime > 0 ? survey.requiredTime : configuration.baseStation.surveyDuration;
+
+  useEffect(() => {
+    if (survey.status === 'initializing') {
+      setDisplayElapsedTime(0);
+      setSmoothElapsedTime(0);
+      surveyStartedAtRef.current = null;
+      return;
+    }
+
+    if (survey.isActive) {
+      const safeElapsed = Math.max(0, Math.floor(survey.elapsedTime));
+      setDisplayElapsedTime(safeElapsed);
+
+      if (surveyStartedAtRef.current === null) {
+        surveyStartedAtRef.current = Date.now() - safeElapsed * 1000;
+      }
+
+      const tick = () => {
+        if (surveyStartedAtRef.current === null) {
+          setSmoothElapsedTime(safeElapsed);
+          return;
+        }
+
+        const runtimeSeconds = Math.floor((Date.now() - surveyStartedAtRef.current) / 1000);
+        setSmoothElapsedTime(Math.min(Math.max(runtimeSeconds, safeElapsed), requiredTimeSecs));
+      };
+
+      tick();
+      const interval = setInterval(tick, 250);
+      return () => clearInterval(interval);
+    }
+
+    const settledElapsed = Math.min(survey.elapsedTime, requiredTimeSecs);
+    setDisplayElapsedTime(settledElapsed);
+    setSmoothElapsedTime(settledElapsed);
+    surveyStartedAtRef.current = null;
+  }, [survey.elapsedTime, survey.isActive, survey.status, requiredTimeSecs]);
+
+  useEffect(() => {
+    prevIsActiveRef.current = survey.isActive;
+  }, [survey.isActive]);
+
+  const clampedElapsedTime = Math.min(smoothElapsedTime, requiredTimeSecs);
+
+  useEffect(() => {
+    if (shouldShowStartLoadingToast) {
+      if (!isStartToastOpenRef.current) {
+        toast.loading('Starting survey...', { id: startToastIdRef.current });
+        isStartToastOpenRef.current = true;
+      }
+      return;
+    }
+
+    if (isStartToastOpenRef.current) {
+      toast.dismiss(startToastIdRef.current);
+      isStartToastOpenRef.current = false;
+    }
+  }, [shouldShowStartLoadingToast]);
+
+  useEffect(() => {
+    if (!isStartToastOpenRef.current) {
+      return;
+    }
+
+    const isStillStarting = pendingAction === 'start' && (survey.status === 'initializing' || survey.isActive);
+    if (isStillStarting) {
+      return;
+    }
+
+    toast.dismiss(startToastIdRef.current);
+    isStartToastOpenRef.current = false;
+  }, [isLoading, survey.status, survey.isActive, shouldShowStreamingState, isFixedBaseState, autoFlowRuntime.isAwaitingConfirm]);
+
+  useEffect(() => {
+    return () => {
+      toast.dismiss(startToastIdRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pendingAction === 'start') {
+      const startSettled =
+        survey.status === 'in-progress' ||
+        autoFlowRuntime.isAwaitingConfirm ||
+        shouldShowStreamingState ||
+        showBaseFixedBanner ||
+        showFixedIndicators ||
+        survey.status === 'failed';
+
+      if (startSettled) {
+        if (survey.status === 'in-progress') {
+          uiLogger.log('Survey Started Successfully', 'SurveyStatus');
+          toast.success('Survey started');
+        } else if (shouldShowStreamingState) {
+          toast.success('Streaming started');
+        } else if (autoFlowRuntime.isAwaitingConfirm) {
+          toast.info('Position changed. Choose Resurvey or Skip Resurvey.');
+        }
+
+        setPendingAction(null);
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (pendingAction === 'stop') {
+      const stopSettled =
+        survey.status === 'stopped' &&
+        !survey.isActive &&
+        !isAutoFlowActive &&
+        !isAutoFlowSessionActive &&
+        !streams.ntrip.active;
+
+      if (stopSettled) {
+        setPendingAction(null);
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (pendingAction === 'decision') {
+      if (!autoFlowRuntime.isAwaitingConfirm) {
+        setPendingAction(null);
+        setIsLoading(false);
+      }
+    }
+  }, [
+    autoFlowRuntime.isAwaitingConfirm,
+    isAutoFlowActive,
+    isAutoFlowSessionActive,
+    pendingAction,
+    shouldShowStreamingState,
+    showBaseFixedBanner,
+    showFixedIndicators,
+    streams.ntrip.active,
+    survey.isActive,
+    survey.status,
+  ]);
+
+  useEffect(() => {
+    const percentage = requiredTimeSecs > 0
+      ? Math.min((clampedElapsedTime / requiredTimeSecs) * 100, 100)
+      : 0;
+    setProgressPercentage(percentage);
+  }, [clampedElapsedTime, requiredTimeSecs]);
+
+  useEffect(() => {
+    if (!autoFlowRuntime.isAwaitingConfirm || !autoFlowRuntime.deadlineAt) {
+      setConfirmCountdown(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remainingMs = autoFlowRuntime.deadlineAt!.getTime() - Date.now();
+      setConfirmCountdown(Math.max(0, Math.ceil(remainingMs / 1000)));
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [autoFlowRuntime.deadlineAt, autoFlowRuntime.isAwaitingConfirm]);
+
+  const surveWasActiveRef = useRef(false);
+  useEffect(() => {
+    if (!survey.isActive && surveWasActiveRef.current === true) {
+      uiLogger.log('Survey ended', 'SurveyStatus', {
+        finalAccuracy: survey.currentAccuracy,
+        duration: survey.elapsedTime,
+      });
+    }
+    surveWasActiveRef.current = survey.isActive;
+  }, [survey.isActive, survey.currentAccuracy, survey.elapsedTime]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatCoordinate = () => {
+    if (coordinateFormat === 'Global') {
+      return {
+        lat: Number.isFinite(gnssStatus.globalPosition.latitude) && gnssStatus.globalPosition.latitude !== 0 ? gnssStatus.globalPosition.latitude.toFixed(8) : 'NIL',
+        lon: Number.isFinite(gnssStatus.globalPosition.longitude) && gnssStatus.globalPosition.longitude !== 0 ? gnssStatus.globalPosition.longitude.toFixed(8) : 'NIL',
+        alt: Number.isFinite(gnssStatus.globalPosition.altitude) && gnssStatus.globalPosition.altitude !== 0 ? gnssStatus.globalPosition.altitude.toFixed(3) : 'NIL',
+      };
+    }
+
+    if (savedBasePosition) {
+      const x = Number(savedBasePosition.ecef_x);
+      const y = Number(savedBasePosition.ecef_y);
+      const z = Number(savedBasePosition.ecef_z);
+      return {
+        lat: Number.isFinite(x) ? x.toFixed(4) : 'NIL',
+        lon: Number.isFinite(y) ? y.toFixed(4) : 'NIL',
+        alt: Number.isFinite(z) ? z.toFixed(4) : 'NIL',
+      };
+    }
+
+    return {
+      lat: 'NIL',
+      lon: 'NIL',
+      alt: 'NIL',
+    };
+  };
+
+  const coords = formatCoordinate();
+
+  const llhToEcef = (latitude: number, longitude: number, altitude: number) => {
+    const a = 6378137.0;
+    const e2 = 6.69437999014e-3;
+    const lat = latitude * (Math.PI / 180);
+    const lon = longitude * (Math.PI / 180);
+    const sinLat = Math.sin(lat);
+    const cosLat = Math.cos(lat);
+    const cosLon = Math.cos(lon);
+    const sinLon = Math.sin(lon);
+    const n = a / Math.sqrt(1 - e2 * sinLat * sinLat);
+
+    return {
+      x: (n + altitude) * cosLat * cosLon,
+      y: (n + altitude) * cosLat * sinLon,
+      z: (n * (1 - e2) + altitude) * sinLat,
+    };
+  };
+
+  const normalizeFileName = (input: string, ext: string) => {
+    const cleaned = input.trim().replace(/[<>:"/\\|?*]+/g, '_');
+    const safe = cleaned || `position_${new Date().toISOString().split('T')[0]}`;
+    return safe.toLowerCase().endsWith(`.${ext}`) ? safe : `${safe}.${ext}`;
+  };
+
+  const downloadOrShareFile = async (
+    fileName: string,
+    content: string,
+    mimeType: string,
+    successMessage: string
+  ) => {
+    if (Capacitor.isNativePlatform()) {
+      await Filesystem.writeFile({
+        path: fileName,
+        data: content,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+        recursive: true,
+      });
+
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Documents,
+        path: fileName,
+      });
+
+      await Share.share({
+        title: fileName,
+        text: `Exported file: ${fileName}`,
+        url: uri,
+        dialogTitle: 'Save or share exported file',
+      });
+
+      toast.success(successMessage);
+      return;
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(successMessage);
+  };
+
+  const exportPositionFile = async () => {
+    const defaultName = `position_${new Date().toISOString().split('T')[0]}`;
+    const inputName = window.prompt('Enter file name', defaultName);
+    if (!inputName) return;
+
+    if (!savedBasePosition) {
+      toast.error('No saved base position found (cannot export accuracy).');
+      return;
+    }
+
+    const lat = Number(savedBasePosition.latitude);
+    const lon = Number(savedBasePosition.longitude);
+    const alt = Number(savedBasePosition.altitude);
+    const accuracy = Number(savedBasePosition.accuracy);
+
+    if (![lat, lon, alt].every((v) => Number.isFinite(v)) || lat === 0 || lon === 0) {
+      toast.error('No valid global position to export');
+      return;
+    }
+
+    const payload = {
+      format: 'gnss-position-export',
+      version: 1,
+      name: normalizeFileName(inputName, 'json'),
+      exported_at: new Date().toISOString(),
+      accuracy_m: Number.isFinite(accuracy) ? accuracy : 0,
+      global_llh: { latitude: lat, longitude: lon, altitude: alt },
+      local_xyz: { x: savedBasePosition.ecef_x, y: savedBasePosition.ecef_y, z: savedBasePosition.ecef_z },
+    };
+
+    try {
+      const fileName = payload.name;
+      await downloadOrShareFile(fileName, JSON.stringify(payload, null, 2), 'application/json', 'Position exported');
+      uiLogger.log('Export Position', 'SurveyStatus', payload);
+    } catch (error) {
+      toast.error(`Position export failed: ${String(error)}`);
+    }
+  };
+
+  const handleStartSurvey = async () => {
+    try {
+      setPendingAction('start');
+      setIsLoading(true);
+      setAccuracyHistory([]);
+      setFinalAccuracyRecord(null);
+      uiLogger.log('Start Survey Button Clicked', 'SurveyStatus', {
+        duration: configuration.baseStation.surveyDuration,
+        accuracy: configuration.baseStation.accuracyThreshold,
+      });
+
+      await startSurvey();
+    } catch (error) {
+      setPendingAction(null);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      toast.dismiss(startToastIdRef.current);
+      isStartToastOpenRef.current = false;
+      uiLogger.log('Start Survey Failed', 'SurveyStatus', undefined, errorMsg);
+      toast.error(`Failed to start survey: ${errorMsg}`);
+      setIsLoading(false);
+    }
+  };
+
+  const handleStopSurvey = async () => {
+    try {
+      toast.dismiss(startToastIdRef.current);
+      isStartToastOpenRef.current = false;
+      setPendingAction('stop');
+      setIsLoading(true);
+      uiLogger.log('Stop Survey Button Clicked', 'SurveyStatus', {
+        elapsedTime: survey.elapsedTime,
+        accuracy: `${(survey.currentAccuracy).toFixed(1)}cm`,
+      });
+
+      await stopSurvey();
+
+      uiLogger.log('Survey Stopped Successfully', 'SurveyStatus');
+      toast.success('Survey stopped');
+    } catch (error) {
+      setPendingAction(null);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      uiLogger.log('Stop Survey Failed', 'SurveyStatus', undefined, errorMsg);
+      toast.error(`Failed to stop survey: ${errorMsg}`);
+    } finally {
+      if (pendingAction !== 'stop') {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const getDisplayStatus = () => {
+    if (autoFlowRuntime.isAwaitingConfirm) return 'Awaiting Confirm';
+    if (survey.isActive) return 'In Progress';
+    if (shouldShowStreamingState) return 'Streaming';
+    if (survey.status === 'initializing') return 'Initializing';
+    if (survey.status === 'stopped') return 'Stopped';
+    if (isFixedBaseState) return 'Fixed Base';
+    return 'Idle';
+  };
+
+  const handleConfirmResurvey = async () => {
+    try {
+      setPendingAction('decision');
+      setIsLoading(true);
+      await confirmResurvey();
+      toast.success('Resurvey confirmed');
+    } catch (error) {
+      setPendingAction(null);
+      toast.error(`Failed to confirm resurvey: ${String(error)}`);
+    } finally {
+      if (pendingAction !== 'decision') {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const handleSkipResurvey = async () => {
+    try {
+      setPendingAction('decision');
+      setIsLoading(true);
+      await skipResurvey();
+      toast.success('Saved position kept');
+    } catch (error) {
+      setPendingAction(null);
+      toast.error(`Failed to skip resurvey: ${String(error)}`);
+    } finally {
+      if (pendingAction !== 'decision') {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const getStatusBadgeColor = () => {
+    if (autoFlowRuntime.isAwaitingConfirm) return 'bg-violet-600 text-white';
+    if (survey.isActive) return survey.status === 'initializing' ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white';
+    if (shouldShowStreamingState) return 'bg-emerald-500 text-white';
+    if (survey.status === 'initializing') return 'bg-blue-500 text-white';
+    if (survey.status === 'stopped') return 'bg-red-500 text-white';
+    if (isFixedBaseState) return 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900';
+    return 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  };
+
+  const lockedAccuracy = useRef<number>(0);
+  const lockedTime = useRef<number>(0);
+
+  useEffect(() => {
+    if (!survey.isActive && clampedElapsedTime > 0) {
+      lockedAccuracy.current = survey.currentAccuracy;
+      lockedTime.current = clampedElapsedTime; 
+    } else if (survey.isActive) {
+      lockedAccuracy.current = 0;
+      lockedTime.current = 0;
+    }
+  }, [survey.isActive, survey.currentAccuracy, clampedElapsedTime]);
+
+  const livePositionAccuracyM = gnssStatus.globalPosition.horizontalAccuracy > 0
+    ? Number(gnssStatus.globalPosition.horizontalAccuracy)
+    : 0;
+  const savedPositionAccuracyM = savedBasePosition?.accuracy && savedBasePosition.accuracy > 0
+    ? Number(savedBasePosition.accuracy)
+    : 0;
+
+  // Rule:
+  // - While surveying: use /api/v1/status/position accuracy (horizontal)
+  // - After completion: use saved-position accuracy; if NIL fallback to /status/position
+  const displayAccuracyCm = (survey.isActive || survey.status === 'initializing')
+    ? (livePositionAccuracyM > 0 ? livePositionAccuracyM * 100 : 0)
+    : (savedPositionAccuracyM > 0
+      ? savedPositionAccuracyM * 100
+      : (livePositionAccuracyM > 0 ? livePositionAccuracyM * 100 : (!savedBasePosition && lockedAccuracy.current > 0 ? lockedAccuracy.current : 0)));
+  const displaySatelliteCount = survey.satelliteCount > 0
+    ? survey.satelliteCount
+    : gnssStatus.satellites.length > 0
+    ? gnssStatus.satellites.length
+    : 0;
+  const finalDisplayTime = !survey.isActive && lockedTime.current > 0 ? lockedTime.current : clampedElapsedTime;
+
+  return (
+    <div className="space-y-6">
+      
+      {/* ── SURVEY STATUS CARD ── */}
+      <Card className={`${isFixedBaseState ? 'bg-card border-primary/20' : 'bg-card border-border'} shadow-sm transition-colors`}>
+        <CardHeader className="space-y-4 border-b border-border bg-muted/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-foreground">Survey Status</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                {isFixedBaseState ? 'Saved base reference is active and ready for streaming.' : 'Real-time survey-in mode monitoring'}
+              </CardDescription>
+            </div>
+            <Badge className={`${getStatusBadgeColor()} border-none shadow-none`}>
+              {getDisplayStatus()}
+            </Badge>
+          </div>
+
+          {showBaseFixedBanner && (
+            <div className="flex items-center justify-start">
+              <div className="grid min-w-[260px] gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm shadow-sm">
+                <div className="flex items-center gap-2 text-foreground">
+                  <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-medium">Base is Fixed</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl bg-muted/30 px-3 py-2 text-muted-foreground">
+                    Mode: Fixed Base
+                  </div>
+                  <div className="rounded-xl bg-muted/30 px-3 py-2 text-muted-foreground">
+                    Status: Ready
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Stored base reference is active. Start the flow to publish corrections.
+                </div>
+              </div>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-center">
+            <div className="relative">
+              <svg className="size-48" viewBox="0 0 200 200">
+                <circle
+                  cx="100"
+                  cy="100"
+                  r="85"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="10"
+                  className="text-slate-100 dark:text-slate-800"
+                />
+                <circle
+                  cx="100"
+                  cy="100"
+                  r="85"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  className={progressPercentage >= 100 ? 'text-emerald-500' : 'text-primary'}
+                  strokeDasharray={`${(progressPercentage / 100) * 534.07} 534.07`}
+                  transform="rotate(-90 100 100)"
+                  style={{ transition: 'stroke-dasharray 0.3s ease' }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-4xl font-bold font-mono text-foreground">{formatTime(finalDisplayTime)}</span>
+                <span className="text-sm font-medium text-muted-foreground">/ {formatTime(requiredTimeSecs)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 rounded-xl bg-muted/20 border border-border">
+              <Clock className="size-5 mx-auto mb-2 text-primary" />
+              <div className="text-2xl font-bold font-mono text-foreground">{formatTime(requiredTimeSecs)}</div>
+              <div className="text-xs font-semibold text-muted-foreground mt-1">Time Limit</div>
+            </div>
+
+            <div className="text-center p-4 rounded-xl bg-muted/20 border border-border">
+              <Target className="size-5 mx-auto mb-2 text-emerald-500" />
+              <div className="text-2xl font-bold font-mono text-foreground">
+                {parseFloat(((survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)).toFixed(0))}
+                <span className="text-xs font-sans font-semibold text-muted-foreground ml-1">cm</span>
+              </div>
+              <div className="text-xs font-semibold text-muted-foreground mt-1">Target</div>
+            </div>
+
+            <div className="text-center p-4 rounded-xl bg-muted/20 border border-border">
+              <Satellite className="size-5 mx-auto mb-2 text-primary" />
+              <div className="text-2xl font-bold text-foreground">{displaySatelliteCount > 0 ? displaySatelliteCount : 'NIL'}</div>
+              <div className="text-xs font-semibold text-muted-foreground mt-1">Satellites</div>
+            </div>
+
+            <Dialog open={showAccuracyHistory} onOpenChange={setShowAccuracyHistory}>
+              <DialogTrigger asChild>
+                <div className="text-center p-4 rounded-xl bg-muted/20 border border-border hover:bg-muted/30 transition-colors cursor-pointer">
+                  <CheckCircle2 className="size-5 mx-auto mb-2 text-orange-500" />
+                  <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-500">
+                    {displayAccuracyCm > 0 ? parseFloat((displayAccuracyCm).toFixed(1)) : 'NIL'}
+                    {displayAccuracyCm > 0 && <span className="text-xs font-sans font-semibold ml-1">cm</span>}
+                  </div>
+                  <div className="text-xs font-semibold text-muted-foreground mt-1">
+                    {accuracyHistory.length > 1 ? 'Accuracy (Click)' : 'Accuracy'}
+                  </div>
+                </div>
+              </DialogTrigger>
+              <DialogContent className="max-w-md bg-white dark:bg-[#020617] border-slate-200 dark:border-slate-800">
+                <DialogHeader>
+                  <DialogTitle className="text-slate-900 dark:text-slate-50">Accuracy History</DialogTitle>
+                  <DialogDescription className="text-slate-500 dark:text-slate-400">All accuracy attempts during this survey</DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="h-64 w-full">
+                  <div className="space-y-2 p-4">
+                    {accuracyHistory.map((record, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex justify-between items-center p-3 rounded-lg ${record.isSuccess
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20'
+                            : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20'
+                          }`}
+                      >
+                        <div>
+                          <div className={`font-mono font-bold ${record.isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>{record.accuracy}cm</div>
+                          <div className={`text-xs ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>{record.elapsedTime}</div>
+                        </div>
+                        <div className={`text-xs font-bold ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
+                          {record.isSuccess ? '✓ Met' : '✗ Not Met'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {autoFlowRuntime.isAwaitingConfirm && (
+            <div className="rounded-xl border border-violet-200 dark:border-violet-900/40 bg-violet-50 dark:bg-violet-950/20 px-4 py-3 text-sm text-violet-900 dark:text-violet-100">
+              <div className="font-semibold">Position change detected. Confirm resurvey or keep the saved position.</div>
+              <div className="mt-1 text-xs font-medium text-violet-700 dark:text-violet-300">
+                {confirmCountdown !== null
+                  ? `Time remaining: ${Math.floor(confirmCountdown / 60)}:${String(confirmCountdown % 60).padStart(2, '0')}`
+                  : 'Waiting for backend confirmation window.'}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            {autoFlowRuntime.isAwaitingConfirm ? (
+              <>
+                <Button
+                  onClick={handleConfirmResurvey}
+                  className="flex-1 gap-2 bg-violet-600 hover:bg-violet-700 text-white"
+                  disabled={isLoading}
+                >
+                  <Play className="size-4" /> Resurvey
+                </Button>
+                <Button
+                  onClick={handleSkipResurvey}
+                  variant="outline"
+                  className="flex-1 gap-2 border-slate-300 dark:border-slate-700"
+                  disabled={isLoading}
+                >
+                  <Square className="size-4" /> Skip Resurvey
+                </Button>
+              </>
+            ) : shouldShowStopButton ? (
+              <Button onClick={handleStopSurvey} variant="destructive" className="flex-1 gap-2" disabled={isLoading}>
+                <Square className="size-4" /> Stop
+              </Button>
+            ) : !survey.isActive ? (
+              <Button
+                onClick={handleStartSurvey}
+                className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={isLoading || survey.status === 'initializing'}
+              >
+                <Play className="size-4" /> {survey.status === 'initializing' ? 'Starting' : 'Start'}
+              </Button>
+            ) : (
+              <Button onClick={handleStopSurvey} variant="destructive" className="flex-1 gap-2" disabled={isLoading}>
+                <Square className="size-4" /> Stop
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ⭐ MINIMAL, TECHNICAL NTRIP STATUS STRIP */}
+      {(streams?.ntrip?.active || (streams?.ntrip?.enabled && (isAutoFlowSessionActive || isAutoFlowActive))) && (
+        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+          
+          {/* Subtle loading bar running continuously along the top border */}
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div className="h-full bg-blue-500 w-1/3 animate-[translateX_2s_ease-in-out_infinite]" />
+          </div>
+
+          <div className="p-4 md:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            
+            {/* Left side: Identity & Status */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center p-2.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+                <Radio className="size-5" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">NTRIP Broadcasting</h3>
+                  <RefreshCw className="size-3 text-slate-400 animate-spin duration-3000" />
+                </div>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  MOUNT: <span className="font-semibold text-slate-700 dark:text-slate-300">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Right side: Clean Data Readout */}
+            <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto border-t sm:border-t-0 border-slate-100 dark:border-slate-800 pt-3 sm:pt-0 justify-between sm:justify-end">
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Speed</p>
+                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[9px] ml-0.5 text-slate-500">KB/s</span>
+                </p>
+              </div>
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-800" />
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Tx Total</p>
+                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[9px] ml-0.5 text-slate-500">KB</span>
+                </p>
+              </div>
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-800" />
+              <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Uptime</p>
+                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Add the custom keyframe for the top loading bar if you don't have it in your global CSS */}
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes translateX {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(300%); }
+            }
+          `}} />
+        </Card>
+      )}
+
+      {/* ── POSITION DATA CARD ── */}
+      <Card className="bg-card border border-border shadow-sm">
+        <CardHeader className="pb-4 border-b border-border bg-muted/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 text-primary rounded-lg">
+                <MapPin className="size-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base text-foreground">Position Data</CardTitle>
+                <CardDescription className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                  {coordinateFormat === 'Global' ? 'GLOBAL_GNSS_RX' : 'LOCAL_SURVEY_PROC'}
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {showFixedIndicators && (
+                <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 gap-1.5 px-2 py-0.5 rounded-full text-[10px]">
+                  <span className="size-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                  RTK FIXED
+                </Badge>
+              )}
+              <div className="text-[11px] font-mono font-bold text-muted-foreground bg-background px-2 py-1 rounded-md border border-border">
+                ±{
+                  survey.isActive
+                    ? (gnssStatus.globalPosition.horizontalAccuracy > 0 ? Number(gnssStatus.globalPosition.horizontalAccuracy).toFixed(3) : 'NIL')
+                    : (savedBasePosition?.accuracy && savedBasePosition.accuracy > 0
+                      ? Number(savedBasePosition.accuracy).toFixed(3)
+                      : (gnssStatus.globalPosition.horizontalAccuracy > 0 ? Number(gnssStatus.globalPosition.horizontalAccuracy).toFixed(3) : 'NIL'))
+                }m
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="p-5 space-y-5">
+          <Tabs value={coordinateFormat} onValueChange={(v) => setCoordinateFormat(v as any)}>
+            <TabsList className="grid w-full grid-cols-2 p-1 bg-muted/40 rounded-lg border border-border">
+              <TabsTrigger value="Global" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">GLOBAL</TabsTrigger>
+              <TabsTrigger value="Local" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold data-[state=active]:bg-card data-[state=active]:text-foreground text-muted-foreground">LOCAL</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="bg-background rounded-xl border border-border p-1 font-mono overflow-hidden">
+            <div className="grid grid-cols-1 divide-y divide-border">
+              
+              <div className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+                <div className="text-[10px] font-bold text-muted-foreground w-24 shrink-0">
+                  {coordinateFormat === 'Global' ? 'LAT' : 'ECEF X'}
+                </div>
+                <div className="text-lg font-bold text-foreground truncate">{coords.lat}</div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+                <div className="text-[10px] font-bold text-muted-foreground w-24 shrink-0">
+                  {coordinateFormat === 'Global' ? 'LON' : 'ECEF Y'}
+                </div>
+                <div className="text-lg font-bold text-foreground truncate">{coords.lon}</div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors bg-muted/20">
+                <div className="text-[10px] font-bold text-muted-foreground w-24 shrink-0">
+                  {coordinateFormat === 'Global' ? 'ALT (MSL)' : 'ECEF Z'}
+                </div>
+                <div className="text-lg font-bold text-foreground truncate">
+                  {coords.alt} <span className="text-xs text-muted-foreground font-normal">m</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <Button
+            variant="default"
+            className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-10 font-bold text-xs transition-transform active:scale-95 shadow-sm"
+            onClick={exportPositionFile}
+          >
+            <Download className="size-4" />
+            EXPORT FILE
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};

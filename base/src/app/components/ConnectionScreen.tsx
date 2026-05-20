@@ -21,10 +21,7 @@ export const ConnectionScreen: React.FC = () => {
   // WebSocket Scanner States
   const [availableSockets, setAvailableSockets] = useState<{id: string, name: string, ip: string, url: string}[]>([]);
   const [selectedSocket, setSelectedSocket] = useState<string>('');
-  const [customIp, setCustomIp] = useState<string>(() => {
-    const envDefault = (import.meta as any)?.env?.VITE_DEFAULT_WS_URL as string | undefined;
-    return typeof envDefault === 'string' ? envDefault : '';
-  });
+  const [customIp, setCustomIp] = useState<string>(''); 
   const [currentWifiName, setCurrentWifiName] = useState<string>('');
   
   const [isConnecting, setIsConnecting] = useState(false);

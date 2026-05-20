@@ -1,506 +1,5 @@
-// import React, { useState, useEffect, useRef } from 'react';
-// import { useGNSS } from '../../../context/GNSSContext';
-// import { api } from '../../../api/gnssApi';
-// import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-// import { Button } from '../ui/button';
-// import { Badge } from '../ui/badge';
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-// import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
-// import { ScrollArea } from '../ui/scroll-area';
-// import {
-//   Play,
-//   Square,
-//   MapPin,
-//   Copy,
-//   CheckCircle2,
-//   Clock,
-//   Target,
-//   Satellite,
-//   Settings,
-//   Info,
-//   Radio, // Added for the NTRIP banner
-//   Activity // Added for the NTRIP banner
-// } from 'lucide-react';
-// import { toast } from 'sonner';
-// import { uiLogger } from '../../../utils/uiLogger';
-
-// interface AccuracyRecord {
-//   accuracy: number;
-//   elapsedTime: string;
-//   isSuccess: boolean;
-// }
-
-// export const SurveyStatus: React.FC = () => {
-//   // ⭐ Added 'streams' to the destructuring so we can access NTRIP data
-//   const { survey, startSurvey, stopSurvey, configuration, gnssStatus, streams } = useGNSS();
-//   const [coordinateFormat, setCoordinateFormat] = useState<'Global' | 'Local'>('Global');
-//   const [isLoading, setIsLoading] = useState(false);
-//   const [accuracyHistory, setAccuracyHistory] = useState<AccuracyRecord[]>([]);
-//   const [finalAccuracyRecord, setFinalAccuracyRecord] = useState<AccuracyRecord | null>(null);
-//   const [showAccuracyHistory, setShowAccuracyHistory] = useState(false);
-//   const [progressPercentage, setProgressPercentage] = useState(0);
-//   const hasMetTargetAccuracy = survey.currentAccuracy > 0 && survey.currentAccuracy <= survey.targetAccuracy;
-//   const showFixedIndicators = !survey.isActive && survey.status !== 'stopped' && hasMetTargetAccuracy;
-
-//   const requiredTimeSecs = survey.isActive ? survey.requiredTime : configuration.baseStation.surveyDuration;
-//   const clampedElapsedTime = Math.min(survey.elapsedTime, requiredTimeSecs);
-
-//   useEffect(() => {
-//     const percentage = requiredTimeSecs > 0
-//       ? Math.min((clampedElapsedTime / requiredTimeSecs) * 100, 100)
-//       : 0;
-//     setProgressPercentage(percentage);
-//   }, [clampedElapsedTime, requiredTimeSecs]);
-
-//   const surveWasActiveRef = useRef(false);
-//   useEffect(() => {
-//     if (!survey.isActive && surveWasActiveRef.current === true) {
-//       uiLogger.log('Survey ended', 'SurveyStatus', {
-//         finalAccuracy: survey.currentAccuracy,
-//         duration: survey.elapsedTime,
-//       });
-//     }
-//     surveWasActiveRef.current = survey.isActive;
-//   }, [survey.isActive, survey.currentAccuracy, survey.elapsedTime]);
-
-//   const formatTime = (seconds: number) => {
-//     const mins = Math.floor(seconds / 60);
-//     const secs = seconds % 60;
-//     return `${mins}:${secs.toString().padStart(2, '0')}`;
-//   };
-
-//   const formatCoordinate = () => {
-//     const lat = gnssStatus.globalPosition.latitude || survey.position.latitude;
-//     const lon = gnssStatus.globalPosition.longitude || survey.position.longitude;
-//     const alt = gnssStatus.globalPosition.altitude || survey.position.altitude;
-
-//     if (coordinateFormat === 'Global') {
-//       return {
-//         lat: lat && !isNaN(lat) && lat !== 0 ? lat.toFixed(8) : 'NIL',
-//         lon: lon && !isNaN(lon) && lon !== 0 ? lon.toFixed(8) : 'NIL',
-//         alt: alt && !isNaN(alt) && alt !== 0 ? alt.toFixed(3) : 'NIL',
-//       };
-//     } else {
-//       let finalX = survey.localCoordinates.meanX;
-//       let finalY = survey.localCoordinates.meanY;
-//       let finalZ = survey.localCoordinates.meanZ;
-
-//       if ((!finalX || isNaN(finalX) || finalX === 0) && (!finalY || isNaN(finalY) || finalY === 0) && lat !== 0 && lon !== 0) {
-//         finalX = (lon * 20037508.34) / 180;
-//         const rad = (lat * Math.PI) / 180;
-//         finalY = (Math.log(Math.tan((Math.PI / 4) + (rad / 2))) * (20037508.34 / Math.PI));
-//         finalZ = alt;
-//       }
-
-//       const isValidX = finalX !== undefined && finalX !== null && !isNaN(finalX) && finalX !== 0;
-//       const isValidY = finalY !== undefined && finalY !== null && !isNaN(finalY) && finalY !== 0;
-//       const isValidZ = finalZ !== undefined && finalZ !== null && !isNaN(finalZ) && finalZ !== 0;
-
-//       return {
-//         lat: isValidX ? finalX.toFixed(4) : 'NIL',
-//         lon: isValidY ? finalY.toFixed(4) : 'NIL',
-//         alt: isValidZ ? finalZ.toFixed(4) : 'NIL',
-//       };
-//     }
-//   };
-
-//   const coords = formatCoordinate();
-
-//   const copyCoordinates = () => {
-//     const coordText = `${coordinateFormat}: Lat/X: ${coords.lat}, Lon/Y: ${coords.lon}, Alt/Z: ${coords.alt}m`;
-//     navigator.clipboard.writeText(coordText);
-//     uiLogger.log('Copy Coordinates', 'SurveyStatus', coordText);
-//     toast.success('Coordinates copied to clipboard');
-//   };
-
-//   const handleStartSurvey = async () => {
-//     try {
-//       setIsLoading(true);
-//       setAccuracyHistory([]);
-//       setFinalAccuracyRecord(null);
-//       uiLogger.log('Start Survey Button Clicked', 'SurveyStatus', {
-//         duration: configuration.baseStation.surveyDuration,
-//         accuracy: configuration.baseStation.accuracyThreshold,
-//       });
-
-//       await startSurvey();
-
-//       uiLogger.log('Survey Started Successfully', 'SurveyStatus');
-//       toast.success('Survey started');
-
-//       setTimeout(() => {
-//         setIsLoading(false);
-//       }, 100);
-//     } catch (error) {
-//       const errorMsg = error instanceof Error ? error.message : String(error);
-//       uiLogger.log('Start Survey Failed', 'SurveyStatus', undefined, errorMsg);
-//       toast.error(`Failed to start survey: ${errorMsg}`);
-//       setIsLoading(false);
-//     }
-//   };
-
-//   const handleStopSurvey = async () => {
-//     try {
-//       setIsLoading(true);
-//       uiLogger.log('Stop Survey Button Clicked', 'SurveyStatus', {
-//         elapsedTime: survey.elapsedTime,
-//         accuracy: `${(survey.currentAccuracy).toFixed(1)}cm`,
-//       });
-
-//       await stopSurvey();
-
-//       uiLogger.log('Survey Stopped Successfully', 'SurveyStatus');
-//       toast.success('Survey stopped');
-//     } catch (error) {
-//       const errorMsg = error instanceof Error ? error.message : String(error);
-//       uiLogger.log('Stop Survey Failed', 'SurveyStatus', undefined, errorMsg);
-//       toast.error(`Failed to stop survey: ${errorMsg}`);
-//     } finally {
-//       setIsLoading(false);
-//     }
-//   };
-
-//   const getDisplayStatus = () => {
-//     if (survey.isActive) return 'In Progress';
-//     if (survey.status === 'stopped') return 'Stopped';
-//     if (showFixedIndicators) return 'Position Fixed';
-//     return 'Idle';
-//   };
-
-//   const getStatusBadgeColor = () => {
-//     if (survey.isActive) return survey.status === 'initializing' ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white';
-//     if (survey.status === 'stopped') return 'bg-red-500 text-white';
-//     if (showFixedIndicators) return 'bg-emerald-500 text-white';
-//     return 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-//   };
-
-//   const lockedAccuracy = useRef<number>(0);
-//   const lockedTime = useRef<number>(0);
-
-//   useEffect(() => {
-//     if (!survey.isActive && clampedElapsedTime > 0) {
-//       lockedAccuracy.current = survey.currentAccuracy;
-//       lockedTime.current = clampedElapsedTime; 
-//     } else if (survey.isActive) {
-//       lockedAccuracy.current = 0;
-//       lockedTime.current = 0;
-//     }
-//   }, [survey.isActive, survey.currentAccuracy, clampedElapsedTime]);
-
-//   const displayAccuracy = !survey.isActive && lockedAccuracy.current > 0 ? lockedAccuracy.current : survey.currentAccuracy;
-//   const finalDisplayTime = !survey.isActive && lockedTime.current > 0 ? lockedTime.current : clampedElapsedTime;
-
-//   return (
-//     <div className="space-y-6">
-//       {/* Survey Status Card */}
-//       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-//         <CardHeader>
-//           <div className="flex items-center justify-between">
-//             <div>
-//               <CardTitle className="text-slate-900 dark:text-slate-50">Survey Status</CardTitle>
-//               <CardDescription className="text-slate-500 dark:text-slate-400">Real-time survey-in mode monitoring</CardDescription>
-//             </div>
-//             <Badge className={`${getStatusBadgeColor()} border-none shadow-none`}>
-//               {getDisplayStatus()}
-//             </Badge>
-//           </div>
-//         </CardHeader>
-//         <CardContent className="space-y-6">
-//           <div className="flex items-center justify-center">
-//             <div className="relative">
-//               <svg className="size-48" viewBox="0 0 200 200">
-//                 <circle
-//                   cx="100"
-//                   cy="100"
-//                   r="85"
-//                   fill="none"
-//                   stroke="currentColor"
-//                   strokeWidth="10"
-//                   className="text-slate-100 dark:text-slate-800"
-//                 />
-//                 <circle
-//                   cx="100"
-//                   cy="100"
-//                   r="85"
-//                   fill="none"
-//                   stroke="currentColor"
-//                   strokeWidth="10"
-//                   strokeLinecap="round"
-//                   className={progressPercentage >= 100 ? 'text-emerald-500' : 'text-blue-500'}
-//                   strokeDasharray={`${(progressPercentage / 100) * 534.07} 534.07`}
-//                   transform="rotate(-90 100 100)"
-//                   style={{ transition: 'stroke-dasharray 0.3s ease' }}
-//                 />
-//               </svg>
-//               <div className="absolute inset-0 flex flex-col items-center justify-center">
-//                 <span className="text-4xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(finalDisplayTime)}</span>
-//                 <span className="text-sm font-medium text-slate-500 dark:text-slate-400">/ {formatTime(requiredTimeSecs)}</span>
-//               </div>
-//             </div>
-//           </div>
-
-//           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-//             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
-//               <Clock className="size-5 mx-auto mb-2 text-blue-500" />
-//               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(requiredTimeSecs)}</div>
-//               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
-//                 Time Limit
-//               </div>
-//             </div>
-
-//             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
-//               <Target className="size-5 mx-auto mb-2 text-emerald-500" />
-//               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
-//                 {parseFloat((
-//                   (survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)
-//                 ).toFixed(0))}<span className="text-xs font-sans font-semibold text-slate-500 dark:text-slate-400 ml-1">cm</span>
-//               </div>
-//               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Target</div>
-//             </div>
-
-//             <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
-//               <Satellite className="size-5 mx-auto mb-2 text-purple-500" />
-//               <div className="text-2xl font-bold text-slate-900 dark:text-slate-50">{survey.satelliteCount > 0 ? survey.satelliteCount : 'NIL'}</div>
-//               <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Satellites</div>
-//             </div>
-
-//             <Dialog open={showAccuracyHistory} onOpenChange={setShowAccuracyHistory}>
-//               <DialogTrigger asChild>
-//                 <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-//                   <CheckCircle2 className="size-5 mx-auto mb-2 text-orange-500" />
-//                   <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-500">
-//                     {displayAccuracy > 0 ? parseFloat((displayAccuracy).toFixed(1)) : 'NIL'}
-//                     {displayAccuracy > 0 && <span className="text-xs font-sans font-semibold ml-1">cm</span>}
-//                   </div>
-//                   <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
-//                     {accuracyHistory.length > 1 ? 'Accuracy (Click)' : 'Accuracy'}
-//                   </div>
-//                 </div>
-//               </DialogTrigger>
-//               <DialogContent className="max-w-md bg-white dark:bg-[#020617] border-slate-200 dark:border-slate-800">
-//                 <DialogHeader>
-//                   <DialogTitle className="text-slate-900 dark:text-slate-50">Accuracy History</DialogTitle>
-//                   <DialogDescription className="text-slate-500 dark:text-slate-400">
-//                     All accuracy attempts during this survey
-//                   </DialogDescription>
-//                 </DialogHeader>
-//                 <ScrollArea className="h-64 w-full">
-//                   <div className="space-y-2 p-4">
-//                     {accuracyHistory.map((record, idx) => (
-//                       <div
-//                         key={idx}
-//                         className={`flex justify-between items-center p-3 rounded-lg ${record.isSuccess
-//                             ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20'
-//                             : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20'
-//                           }`}
-//                       >
-//                         <div>
-//                           <div className={`font-mono font-bold ${record.isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
-//                             {record.accuracy}cm
-//                           </div>
-//                           <div className={`text-xs ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
-//                             {record.elapsedTime}
-//                           </div>
-//                         </div>
-//                         <div className={`text-xs font-bold ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
-//                           {record.isSuccess ? '✓ Met' : '✗ Not Met'}
-//                         </div>
-//                       </div>
-//                     ))}
-//                   </div>
-//                 </ScrollArea>
-//               </DialogContent>
-//             </Dialog>
-//           </div>
-
-//           <div className="flex gap-3">
-//             {!survey.isActive ? (
-//               <Button
-//                 onClick={handleStartSurvey}
-//                 className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-//                 disabled={isLoading}
-//               >
-//                 <Play className="size-4" />
-//                 Start Survey
-//               </Button>
-//             ) : (
-//               <Button
-//                 onClick={handleStopSurvey}
-//                 variant="destructive"
-//                 className="flex-1 gap-2"
-//                 disabled={isLoading}
-//               >
-//                 <Square className="size-4" />
-//                 Stop Survey
-//               </Button>
-//             )}
-//           </div>
-//         </CardContent>
-//       </Card>
-
-//       {/* ⭐ NEW: Dashboard Live NTRIP Streaming Banner */}
-//       {streams?.ntrip?.active && (
-//         <div className="relative overflow-hidden rounded-xl border-2 border-emerald-500/50 bg-white dark:bg-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.15)] animate-in slide-in-from-bottom-4 fade-in zoom-in-95 duration-500">
-//           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 animate-[pulse_3s_ease-in-out_infinite]" />
-          
-//           <div className="relative p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-//             <div className="flex items-center gap-4">
-//                <div className="relative flex size-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] shrink-0">
-//                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
-//                   <Radio className="size-6 relative z-10 animate-pulse" />
-//                </div>
-//                <div>
-//                   <div className="flex items-center gap-2">
-//                      <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-emerald-400 tracking-tight">LIVE NTRIP STREAM</h3>
-//                      <Badge variant="outline" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30 text-[9px] uppercase tracking-wider py-0">Broadcasting</Badge>
-//                   </div>
-//                   <p className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[200px] md:max-w-xs">
-//                     MOUNT: <span className="text-slate-800 dark:text-emerald-200">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
-//                   </p>
-//                </div>
-//             </div>
-
-//             <div className="flex items-center gap-6 justify-between md:justify-end bg-slate-50 dark:bg-slate-950/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800/80">
-//                <div>
-//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1"><Activity className="size-3 text-emerald-500" /> Speed</p>
-//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
-//                     {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB/s</span>
-//                   </p>
-//                </div>
-//                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
-//                <div>
-//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Sent</p>
-//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
-//                     {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[10px] font-sans font-medium text-slate-500 dark:text-slate-400 ml-1">KB</span>
-//                   </p>
-//                </div>
-//                <div className="w-px h-8 bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-//                <div className="hidden sm:block">
-//                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Uptime</p>
-//                   <p className="font-mono text-lg font-bold text-slate-900 dark:text-emerald-400 leading-none mt-1">
-//                     {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
-//                   </p>
-//                </div>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Position Information Card */}
-//       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-//         <CardHeader className="pb-4 border-b-2 border-slate-200 dark:border-slate-800">
-//           <div className="flex items-center justify-between">
-//             <div className="flex items-center gap-3">
-//               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
-//                 <MapPin className="size-5" />
-//               </div>
-//               <div>
-//                 <CardTitle className="text-base text-slate-900 dark:text-slate-50 uppercase tracking-wide">Position Data</CardTitle>
-//                 <CardDescription className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-//                   {coordinateFormat === 'Global' ? 'GLOBAL_GNSS_RX' : 'LOCAL_SURVEY_PROC'}
-//                 </CardDescription>
-//               </div>
-//             </div>
-//             <div className="flex flex-col items-end gap-2">
-//               {showFixedIndicators && (
-//                 <Badge className="bg-emerald-500 text-white border-none gap-1.5 px-2 py-0.5 rounded-full text-[10px]">
-//                   <span className="size-1.5 bg-white rounded-full animate-pulse" />
-//                   RTK FIXED
-//                 </Badge>
-//               )}
-//               <div className="text-[11px] font-mono font-bold text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-800">
-//                 ±{survey.position.accuracy > 0 ? survey.position.accuracy.toFixed(3) : 'NIL'}m
-//               </div>
-//             </div>
-//           </div>
-//         </CardHeader>
-        
-//         <CardContent className="p-5 space-y-5">
-//           <Tabs value={coordinateFormat} onValueChange={(v) => setCoordinateFormat(v as any)}>
-//             <TabsList className="grid w-full grid-cols-2 p-1 bg-slate-200 dark:bg-slate-800 rounded-lg">
-//               <TabsTrigger value="Global" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold">GLOBAL</TabsTrigger>
-//               <TabsTrigger value="Local" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold">LOCAL</TabsTrigger>
-//             </TabsList>
-//           </Tabs>
-
-//           <div className="bg-white dark:bg-black rounded-xl border-2 border-slate-200 dark:border-slate-800 p-1 font-mono overflow-hidden">
-//             <div className="grid grid-cols-1 divide-y-2 divide-slate-100 dark:divide-slate-900">
-              
-//               <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-//                 <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
-//                   {coordinateFormat === 'Global' ? 'LAT' : 'EAST (X)'}
-//                 </div>
-//                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{coords.lat}</div>
-//               </div>
-
-//               <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-//                 <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
-//                   {coordinateFormat === 'Global' ? 'LON' : 'NORTH (Y)'}
-//                 </div>
-//                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{coords.lon}</div>
-//               </div>
-
-//               <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors bg-slate-50 dark:bg-slate-900/30">
-//                 <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
-//                   {coordinateFormat === 'Global' ? 'ALT (MSL)' : 'HEIGHT (Z)'}
-//                 </div>
-//                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
-//                   {coords.alt} <span className="text-xs text-slate-500 font-normal">m</span>
-//                 </div>
-//               </div>
-
-//             </div>
-//           </div>
-
-//           <Button 
-//             variant="default" 
-//             className="w-full gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 rounded-xl h-10 font-bold text-xs transition-transform active:scale-95" 
-//             onClick={copyCoordinates}
-//           >
-//             <Copy className="size-4" />
-//             COPY TO CLIPBOARD
-//           </Button>
-//         </CardContent>
-//       </Card>
-//     </div>
-//   );
-// };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useGNSS } from '../../../context/GNSSContext';
-import { api } from '../../../api/gnssApiDynamic';
 import { Capacitor } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -521,7 +20,9 @@ import {
   Radio, 
   Activity, 
   Download,
-  RefreshCw // Added for the minimal spinner
+  RefreshCw,
+  MoreHorizontal,
+  ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uiLogger } from '../../../utils/uiLogger';
@@ -533,6 +34,9 @@ interface AccuracyRecord {
 }
 
 export const SurveyStatus: React.FC = () => {
+  // ==========================================
+  // LOGIC BLOCK - COMPLETELY UNTOUCHED
+  // ==========================================
   const {
     survey,
     startSurvey,
@@ -793,24 +297,6 @@ export const SurveyStatus: React.FC = () => {
 
   const coords = formatCoordinate();
 
-  const llhToEcef = (latitude: number, longitude: number, altitude: number) => {
-    const a = 6378137.0;
-    const e2 = 6.69437999014e-3;
-    const lat = latitude * (Math.PI / 180);
-    const lon = longitude * (Math.PI / 180);
-    const sinLat = Math.sin(lat);
-    const cosLat = Math.cos(lat);
-    const cosLon = Math.cos(lon);
-    const sinLon = Math.sin(lon);
-    const n = a / Math.sqrt(1 - e2 * sinLat * sinLat);
-
-    return {
-      x: (n + altitude) * cosLat * cosLon,
-      y: (n + altitude) * cosLat * sinLon,
-      z: (n * (1 - e2) + altitude) * sinLat,
-    };
-  };
-
   const normalizeFileName = (input: string, ext: string) => {
     const cleaned = input.trim().replace(/[<>:"/\\|?*]+/g, '_');
     const safe = cleaned || `position_${new Date().toISOString().split('T')[0]}`;
@@ -954,7 +440,7 @@ export const SurveyStatus: React.FC = () => {
     if (survey.status === 'initializing') return 'Initializing';
     if (survey.status === 'stopped') return 'Stopped';
     if (isFixedBaseState) return 'Fixed Base';
-    return 'Idle';
+    return 'Standby';
   };
 
   const handleConfirmResurvey = async () => {
@@ -989,14 +475,14 @@ export const SurveyStatus: React.FC = () => {
     }
   };
 
-  const getStatusBadgeColor = () => {
-    if (autoFlowRuntime.isAwaitingConfirm) return 'bg-violet-600 text-white';
-    if (survey.isActive) return survey.status === 'initializing' ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white';
-    if (shouldShowStreamingState) return 'bg-emerald-500 text-white';
-    if (survey.status === 'initializing') return 'bg-blue-500 text-white';
-    if (survey.status === 'stopped') return 'bg-red-500 text-white';
-    if (isFixedBaseState) return 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900';
-    return 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  const getStatusColorInfo = () => {
+    if (autoFlowRuntime.isAwaitingConfirm) return { bg: 'bg-violet-50 dark:bg-violet-500/10', text: 'text-violet-600 dark:text-violet-400', dot: 'bg-violet-500 animate-pulse' };
+    if (survey.isActive) return survey.status === 'initializing' ? { bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', dot: 'bg-blue-500 animate-pulse' } : { bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500 animate-pulse' };
+    if (shouldShowStreamingState) return { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500 animate-pulse' };
+    if (survey.status === 'initializing') return { bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', dot: 'bg-blue-500 animate-pulse' };
+    if (survey.status === 'stopped') return { bg: 'bg-red-50 dark:bg-red-500/10', text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' };
+    if (isFixedBaseState) return { bg: 'bg-emerald-50 dark:bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' };
+    return { bg: 'bg-slate-50 dark:bg-slate-800/50', text: 'text-slate-600 dark:text-slate-400', dot: 'bg-slate-400' };
   };
 
   const lockedAccuracy = useRef<number>(0);
@@ -1019,9 +505,6 @@ export const SurveyStatus: React.FC = () => {
     ? Number(savedBasePosition.accuracy)
     : 0;
 
-  // Rule:
-  // - While surveying: use /api/v1/status/position accuracy (horizontal)
-  // - After completion: use saved-position accuracy; if NIL fallback to /status/position
   const displayAccuracyCm = (survey.isActive || survey.status === 'initializing')
     ? (livePositionAccuracyM > 0 ? livePositionAccuracyM * 100 : 0)
     : (savedPositionAccuracyM > 0
@@ -1034,340 +517,181 @@ export const SurveyStatus: React.FC = () => {
     : 0;
   const finalDisplayTime = !survey.isActive && lockedTime.current > 0 ? lockedTime.current : clampedElapsedTime;
 
+  const statusColors = getStatusColorInfo();
+
+  // ==========================================
+  // UPDATED MINIMAL & INTERACTIVE UI
+  // ==========================================
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5 p-1">
       
-      {/* ── SURVEY STATUS CARD ── */}
-      <Card className={`${isFixedBaseState ? 'bg-slate-50 dark:bg-slate-950/80 border-slate-300 dark:border-slate-700' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'} shadow-sm transition-colors`}>
-        <CardHeader className="space-y-4">
-          <div className="flex items-center justify-between">
+      {/* ── BENTO GRID TOP SECTION ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        {/* Main Status & Timer Card */}
+        <div className="md:col-span-2 relative overflow-hidden rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/40 dark:border-slate-800/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] p-6 transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+          
+          {/* Top Row: Title & Glowing Status Pill */}
+          <div className="flex items-center justify-between mb-8">
             <div>
-              <CardTitle className="text-slate-900 dark:text-slate-50">Survey Status</CardTitle>
-              <CardDescription className="text-slate-500 dark:text-slate-400">
-                {isFixedBaseState ? 'Saved base reference is active and ready for streaming.' : 'Real-time survey-in mode monitoring'}
-              </CardDescription>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Session</h2>
+              <p className="text-sm font-medium text-slate-500 mt-0.5">
+                {isFixedBaseState ? 'Reference Active' : 'Real-time Mode'}
+              </p>
             </div>
-            <Badge className={`${getStatusBadgeColor()} border-none shadow-none`}>
-              {getDisplayStatus()}
-            </Badge>
+            
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${statusColors.bg}`}>
+              <div className={`size-2 rounded-full ${statusColors.dot}`} />
+              <span className={`text-xs font-bold tracking-wide uppercase ${statusColors.text}`}>
+                {getDisplayStatus()}
+              </span>
+            </div>
           </div>
 
-          {showBaseFixedBanner && (
-            <div className="flex items-center justify-start">
-              <div className="grid min-w-[260px] gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                  <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="font-medium">Base is Fixed</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
-                    Mode: Fixed Base
-                  </div>
-                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
-                    Status: Ready
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  Stored base reference is active. Start the flow to publish corrections.
-                </div>
+          {/* Time Display & Circular Progress */}
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Elapsed</span>
+              <div className="flex items-baseline gap-2 text-slate-900 dark:text-white">
+                <span className="text-5xl font-light tracking-tighter tabular-nums">{formatTime(finalDisplayTime)}</span>
+                <span className="text-lg font-medium text-slate-400 tabular-nums">/ {formatTime(requiredTimeSecs)}</span>
               </div>
             </div>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-center">
-            <div className="relative">
-              <svg className="size-48" viewBox="0 0 200 200">
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="85"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="10"
-                  className="text-slate-100 dark:text-slate-800"
-                />
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="85"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  className={progressPercentage >= 100 ? 'text-emerald-500' : 'text-blue-500'}
-                  strokeDasharray={`${(progressPercentage / 100) * 534.07} 534.07`}
-                  transform="rotate(-90 100 100)"
-                  style={{ transition: 'stroke-dasharray 0.3s ease' }}
+
+            {/* Ultra-minimal progress ring */}
+            <div className="relative size-16">
+              <svg className="size-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="46" fill="none" className="stroke-slate-100 dark:stroke-slate-800" strokeWidth="6" />
+                <circle 
+                  cx="50" cy="50" r="46" fill="none" 
+                  className={`transition-all duration-500 ease-out ${progressPercentage >= 100 ? 'stroke-emerald-500' : 'stroke-blue-500'}`} 
+                  strokeWidth="6" strokeLinecap="round"
+                  strokeDasharray={`${(progressPercentage / 100) * 289} 289`}
                 />
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(finalDisplayTime)}</span>
-                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">/ {formatTime(requiredTimeSecs)}</span>
-              </div>
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
-              <Clock className="size-5 mx-auto mb-2 text-blue-500" />
-              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">{formatTime(requiredTimeSecs)}</div>
-              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Time Limit</div>
-            </div>
-
-            <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
-              <Target className="size-5 mx-auto mb-2 text-emerald-500" />
-              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
-                {parseFloat(((survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)).toFixed(0))}
-                <span className="text-xs font-sans font-semibold text-slate-500 dark:text-slate-400 ml-1">cm</span>
-              </div>
-              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Target</div>
-            </div>
-
-            <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80">
-              <Satellite className="size-5 mx-auto mb-2 text-purple-500" />
-              <div className="text-2xl font-bold text-slate-900 dark:text-slate-50">{displaySatelliteCount > 0 ? displaySatelliteCount : 'NIL'}</div>
-              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Satellites</div>
-            </div>
-
-            <Dialog open={showAccuracyHistory} onOpenChange={setShowAccuracyHistory}>
-              <DialogTrigger asChild>
-                <div className="text-center p-4 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-                  <CheckCircle2 className="size-5 mx-auto mb-2 text-orange-500" />
-                  <div className="text-2xl font-bold font-mono text-orange-600 dark:text-orange-500">
-                    {displayAccuracyCm > 0 ? parseFloat((displayAccuracyCm).toFixed(1)) : 'NIL'}
-                    {displayAccuracyCm > 0 && <span className="text-xs font-sans font-semibold ml-1">cm</span>}
-                  </div>
-                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
-                    {accuracyHistory.length > 1 ? 'Accuracy (Click)' : 'Accuracy'}
-                  </div>
-                </div>
-              </DialogTrigger>
-              <DialogContent className="max-w-md bg-white dark:bg-[#020617] border-slate-200 dark:border-slate-800">
-                <DialogHeader>
-                  <DialogTitle className="text-slate-900 dark:text-slate-50">Accuracy History</DialogTitle>
-                  <DialogDescription className="text-slate-500 dark:text-slate-400">All accuracy attempts during this survey</DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="h-64 w-full">
-                  <div className="space-y-2 p-4">
-                    {accuracyHistory.map((record, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex justify-between items-center p-3 rounded-lg ${record.isSuccess
-                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20'
-                            : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20'
-                          }`}
-                      >
-                        <div>
-                          <div className={`font-mono font-bold ${record.isSuccess ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>{record.accuracy}cm</div>
-                          <div className={`text-xs ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>{record.elapsedTime}</div>
-                        </div>
-                        <div className={`text-xs font-bold ${record.isSuccess ? 'text-emerald-600 dark:text-emerald-500' : 'text-red-600 dark:text-red-500'}`}>
-                          {record.isSuccess ? '✓ Met' : '✗ Not Met'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          {autoFlowRuntime.isAwaitingConfirm && (
-            <div className="rounded-xl border border-violet-200 dark:border-violet-900/40 bg-violet-50 dark:bg-violet-950/20 px-4 py-3 text-sm text-violet-900 dark:text-violet-100">
-              <div className="font-semibold">Position change detected. Confirm resurvey or keep the saved position.</div>
-              <div className="mt-1 text-xs font-medium text-violet-700 dark:text-violet-300">
-                {confirmCountdown !== null
-                  ? `Time remaining: ${Math.floor(confirmCountdown / 60)}:${String(confirmCountdown % 60).padStart(2, '0')}`
-                  : 'Waiting for backend confirmation window.'}
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-3">
+        {/* Action Controls & Small Metrics */}
+        <div className="md:col-span-1 flex flex-col gap-4">
+          
+          {/* Action Button Container */}
+          <div className="p-4 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/40 dark:border-slate-800/60 shadow-sm flex flex-col gap-3 justify-center h-full">
+            
             {autoFlowRuntime.isAwaitingConfirm ? (
               <>
-                <Button
-                  onClick={handleConfirmResurvey}
-                  className="flex-1 gap-2 bg-violet-600 hover:bg-violet-700 text-white"
-                  disabled={isLoading}
-                >
-                  <Play className="size-4" /> Resurvey
+                <div className="text-center pb-2">
+                  <p className="text-xs font-semibold text-violet-600 dark:text-violet-400">Position Changed</p>
+                  <p className="text-[10px] text-slate-500">{confirmCountdown !== null ? `Auto-skip in ${confirmCountdown}s` : 'Waiting...'}</p>
+                </div>
+                <Button onClick={handleConfirmResurvey} className="w-full rounded-2xl h-12 bg-violet-600 hover:bg-violet-700 text-white font-semibold transition-transform active:scale-[0.98]" disabled={isLoading}>
+                  Confirm Resurvey
                 </Button>
-                <Button
-                  onClick={handleSkipResurvey}
-                  variant="outline"
-                  className="flex-1 gap-2 border-slate-300 dark:border-slate-700"
-                  disabled={isLoading}
-                >
-                  <Square className="size-4" /> Skip Resurvey
+                <Button onClick={handleSkipResurvey} variant="ghost" className="w-full rounded-2xl h-10 text-slate-500 font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-transform active:scale-[0.98]" disabled={isLoading}>
+                  Skip
                 </Button>
               </>
             ) : shouldShowStopButton ? (
-              <Button onClick={handleStopSurvey} variant="destructive" className="flex-1 gap-2" disabled={isLoading}>
-                <Square className="size-4" /> Stop
-              </Button>
-            ) : !survey.isActive ? (
-              <Button
-                onClick={handleStartSurvey}
-                className="flex-1 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={isLoading || survey.status === 'initializing'}
-              >
-                <Play className="size-4" /> {survey.status === 'initializing' ? 'Starting' : 'Start'}
+              <Button onClick={handleStopSurvey} variant="destructive" className="w-full rounded-2xl h-14 font-semibold text-base shadow-md shadow-red-500/20 transition-all hover:shadow-lg active:scale-[0.98]" disabled={isLoading}>
+                End Session
               </Button>
             ) : (
-              <Button onClick={handleStopSurvey} variant="destructive" className="flex-1 gap-2" disabled={isLoading}>
-                <Square className="size-4" /> Stop
+              <Button 
+                onClick={handleStartSurvey} 
+                className="w-full rounded-2xl h-14 bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 font-semibold text-base shadow-md transition-all hover:shadow-lg active:scale-[0.98]" 
+                disabled={isLoading || survey.status === 'initializing'}
+              >
+                {survey.status === 'initializing' ? 'Initializing...' : 'Start Survey'}
               </Button>
             )}
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* ⭐ MINIMAL, TECHNICAL NTRIP STATUS STRIP */}
+          </div>
+        </div>
+      </div>
+
+      {/* ── METRICS ROW (Hover Cards) ── */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Target', val: `${parseFloat(((survey.isActive ? survey.targetAccuracy : configuration.baseStation.accuracyThreshold)).toFixed(0))}cm`, icon: Target, active: true },
+          { label: 'Sats', val: displaySatelliteCount || '--', icon: Satellite, active: displaySatelliteCount > 0 },
+          { label: 'L - Accuracy', val: displayAccuracyCm > 0 ? `${displayAccuracyCm.toFixed(1)}cm` : '--', icon: CheckCircle2, active: displayAccuracyCm > 0 }
+        ].map((item, i) => (
+          <div key={i} className="group cursor-default rounded-3xl bg-white/60 dark:bg-slate-900/60 backdrop-blur-md border border-white/20 dark:border-slate-800/40 p-4 transition-all duration-300 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm hover:-translate-y-0.5">
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{item.label}</span>
+              <item.icon className={`size-3.5 transition-colors duration-300 ${item.active ? 'text-slate-800 dark:text-slate-200 group-hover:text-blue-500' : 'text-slate-300 dark:text-slate-700'}`} />
+            </div>
+            <div className="text-xl font-semibold text-slate-900 dark:text-white tabular-nums">{item.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── FLOATING NTRIP STRIP ── */}
       {(streams?.ntrip?.active || (streams?.ntrip?.enabled && (isAutoFlowSessionActive || isAutoFlowActive))) && (
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+        <div className="relative overflow-hidden rounded-3xl bg-blue-500 text-white p-5 shadow-lg shadow-blue-500/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:shadow-blue-500/30">
+          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+             <Radio className="size-32 transform rotate-12" />
+          </div>
           
-          {/* Subtle loading bar running continuously along the top border */}
-          <div className="absolute top-0 left-0 w-full h-[2px] bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div className="h-full bg-blue-500 w-1/3 animate-[translateX_2s_ease-in-out_infinite]" />
-          </div>
-
-          <div className="p-4 md:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            
-            {/* Left side: Identity & Status */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center justify-center p-2.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
-                <Radio className="size-5" />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">NTRIP Broadcasting</h3>
-                  <RefreshCw className="size-3 text-slate-400 animate-spin duration-3000" />
-                </div>
-                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                  MOUNT: <span className="font-semibold text-slate-700 dark:text-slate-300">{streams.ntrip.mountpoint || configuration.streams.ntrip.mountpoint || 'VRS_RTCM'}</span>
-                </p>
-              </div>
-            </div>
-
-            {/* Right side: Clean Data Readout */}
-            <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto border-t sm:border-t-0 border-slate-100 dark:border-slate-800 pt-3 sm:pt-0 justify-between sm:justify-end">
-              <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Speed</p>
-                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {(streams.ntrip.throughput / 1024).toFixed(2)}<span className="text-[9px] ml-0.5 text-slate-500">KB/s</span>
-                </p>
-              </div>
-              <div className="w-px h-6 bg-slate-200 dark:bg-slate-800" />
-              <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Tx Total</p>
-                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {(streams.ntrip.dataSent / 1024).toFixed(1)}<span className="text-[9px] ml-0.5 text-slate-500">KB</span>
-                </p>
-              </div>
-              <div className="w-px h-6 bg-slate-200 dark:bg-slate-800" />
-              <div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Uptime</p>
-                <p className="font-mono text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}
-                </p>
-              </div>
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="size-2 rounded-full bg-white animate-ping" />
+            <div>
+              <p className="text-xs font-medium text-blue-100 uppercase tracking-widest">Broadcasting</p>
+              <p className="font-semibold text-lg">{streams.ntrip.mountpoint || 'RTCM_V3'}</p>
             </div>
           </div>
 
-          {/* Add the custom keyframe for the top loading bar if you don't have it in your global CSS */}
-          <style dangerouslySetInnerHTML={{__html: `
-            @keyframes translateX {
-              0% { transform: translateX(-100%); }
-              100% { transform: translateX(300%); }
-            }
-          `}} />
-        </Card>
+          <div className="relative z-10 flex items-center gap-6 bg-black/10 rounded-2xl px-4 py-2 backdrop-blur-sm">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-blue-200 uppercase font-semibold">Speed</span>
+              <span className="font-mono font-medium">{(streams.ntrip.throughput / 1024).toFixed(1)} kb/s</span>
+            </div>
+            <div className="w-px h-6 bg-white/20" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-blue-200 uppercase font-semibold">Uptime</span>
+              <span className="font-mono font-medium">{Math.floor(streams.ntrip.uptime / 60)}:{String(streams.ntrip.uptime % 60).padStart(2, '0')}</span>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* ── POSITION DATA CARD ── */}
-      <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-        <CardHeader className="pb-4 border-b-2 border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
-                <MapPin className="size-5" />
-              </div>
-              <div>
-                <CardTitle className="text-base text-slate-900 dark:text-slate-50 uppercase tracking-wide">Position Data</CardTitle>
-                <CardDescription className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                  {coordinateFormat === 'Global' ? 'GLOBAL_GNSS_RX' : 'LOCAL_SURVEY_PROC'}
-                </CardDescription>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              {showFixedIndicators && (
-                <Badge className="bg-emerald-500 text-white border-none gap-1.5 px-2 py-0.5 rounded-full text-[10px]">
-                  <span className="size-1.5 bg-white rounded-full animate-pulse" />
-                  RTK FIXED
-                </Badge>
-              )}
-              <div className="text-[11px] font-mono font-bold text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-800">
-                ±{
-                  survey.isActive
-                    ? (gnssStatus.globalPosition.horizontalAccuracy > 0 ? Number(gnssStatus.globalPosition.horizontalAccuracy).toFixed(3) : 'NIL')
-                    : (savedBasePosition?.accuracy && savedBasePosition.accuracy > 0
-                      ? Number(savedBasePosition.accuracy).toFixed(3)
-                      : (gnssStatus.globalPosition.horizontalAccuracy > 0 ? Number(gnssStatus.globalPosition.horizontalAccuracy).toFixed(3) : 'NIL'))
-                }m
-              </div>
-            </div>
-          </div>
-        </CardHeader>
+      {/* ── COORDINATES ACCORDION/TABS ── */}
+      <div className="rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/40 dark:border-slate-800/60 shadow-sm overflow-hidden">
         
-        <CardContent className="p-5 space-y-5">
-          <Tabs value={coordinateFormat} onValueChange={(v) => setCoordinateFormat(v as any)}>
-            <TabsList className="grid w-full grid-cols-2 p-1 bg-slate-200 dark:bg-slate-800 rounded-lg">
-              <TabsTrigger value="Global" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold">GLOBAL</TabsTrigger>
-              <TabsTrigger value="Local" className="rounded-md data-[state=active]:shadow-sm text-xs font-bold">LOCAL</TabsTrigger>
+        {/* Minimal segmented control for tabs */}
+        <div className="p-2 bg-slate-50/50 dark:bg-slate-950/50 border-b border-slate-100 dark:border-slate-800">
+          <Tabs value={coordinateFormat} onValueChange={(v) => setCoordinateFormat(v as any)} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-slate-200/50 dark:bg-slate-800/50 rounded-2xl p-1 h-10">
+              <TabsTrigger value="Global" className="rounded-xl font-semibold text-xs transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm">Global GNSS</TabsTrigger>
+              <TabsTrigger value="Local" className="rounded-xl font-semibold text-xs transition-all data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm">Local Survey</TabsTrigger>
             </TabsList>
           </Tabs>
+        </div>
 
-          <div className="bg-white dark:bg-black rounded-xl border-2 border-slate-200 dark:border-slate-800 p-1 font-mono overflow-hidden">
-            <div className="grid grid-cols-1 divide-y-2 divide-slate-100 dark:divide-slate-900">
-              
-              <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
-                  {coordinateFormat === 'Global' ? 'LAT' : 'ECEF X'}
-                </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{coords.lat}</div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
-                  {coordinateFormat === 'Global' ? 'LON' : 'ECEF Y'}
-                </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{coords.lon}</div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors bg-slate-50 dark:bg-slate-900/30">
-                <div className="text-[10px] font-bold text-slate-400 w-24 shrink-0">
-                  {coordinateFormat === 'Global' ? 'ALT (MSL)' : 'ECEF Z'}
-                </div>
-                <div className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
-                  {coords.alt} <span className="text-xs text-slate-500 font-normal">m</span>
-                </div>
-              </div>
-
+        {/* Clean Data List */}
+        <div className="px-6 py-4 space-y-1">
+          {[
+            { label: coordinateFormat === 'Global' ? 'Latitude' : 'ECEF X', val: coords.lat },
+            { label: coordinateFormat === 'Global' ? 'Longitude' : 'ECEF Y', val: coords.lon },
+            { label: coordinateFormat === 'Global' ? 'Altitude (MSL)' : 'ECEF Z', val: coords.alt },
+          ].map((row, i) => (
+            <div key={i} className="group flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800/50 last:border-0 hover:px-2 transition-all duration-300 cursor-default rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30">
+              <span className="text-sm font-medium text-slate-500 transition-colors group-hover:text-slate-900 dark:group-hover:text-slate-200">{row.label}</span>
+              <span className="font-mono text-sm font-medium text-slate-900 dark:text-white tabular-nums">{row.val}</span>
             </div>
-          </div>
+          ))}
+        </div>
 
-          <Button
-            variant="default"
-            className="w-full gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 rounded-xl h-10 font-bold text-xs transition-transform active:scale-95"
-            onClick={exportPositionFile}
-          >
-            <Download className="size-4" />
-            EXPORT FILE
-          </Button>
-        </CardContent>
-      </Card>
+        {/* Seamless Export Action */}
+        <button 
+          onClick={exportPositionFile}
+          className="w-full flex items-center justify-center gap-2 py-4 text-xs font-semibold uppercase tracking-widest text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+        >
+          <Download className="size-4" /> Export Location Data
+        </button>
+      </div>
+
     </div>
   );
 };

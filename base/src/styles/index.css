@@ -1,0 +1,97 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --mobile-nav-height: 88px;
+}
+
+.pt-safe {
+  padding-top: var(--safe-top);
+}
+
+.pb-safe {
+  padding-bottom: var(--safe-bottom);
+}
+
+.mobile-nav-safe {
+  padding-bottom: calc(var(--safe-bottom) + 8px);
+  padding-left: calc(var(--safe-left) + 8px);
+  padding-right: calc(var(--safe-right) + 8px);
+}
+
+.mobile-main-safe {
+  padding-bottom: calc(var(--mobile-nav-height) + var(--safe-bottom) + 20px);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+.bottom-safe-offset {
+  bottom: calc(1.5rem + var(--safe-bottom));
+}
+
+.safe-x {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+.mobile-fixed-safe {
+  left: var(--safe-left);
+  right: var(--safe-right);
+}
+
+.floating-safe-frame {
+  left: calc(1.5rem + var(--safe-left));
+  right: calc(1.5rem + var(--safe-right));
+  bottom: calc(1.5rem + var(--safe-bottom));
+}
+
+@media (min-width: 768px) {
+  .desktop-sidebar-safe {
+    left: var(--safe-left);
+    top: var(--safe-top);
+    height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+  }
+
+  .desktop-main-safe {
+    margin-left: calc(16rem + var(--safe-left));
+    padding-right: var(--safe-right);
+    padding-bottom: calc(var(--safe-bottom) + 12px);
+  }
+}
+
+
+@keyframes cinematic-focus {
+  0% { filter: blur(10px); transform: scale(1.03); opacity: 0; }
+  100% { filter: blur(0); transform: scale(1); opacity: 1; }
+}
+.animate-focus { 
+  animation: cinematic-focus 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
+}
+
+@keyframes swoosh-in {
+  0% { opacity: 0; transform: translateX(-40px) skewX(-5deg); }
+  60% { opacity: 1; transform: translateX(10px) skewX(2deg); }
+  100% { transform: translateX(0) skewX(0); }
+}
+.animate-swoosh { 
+  animation: swoosh-in 0.5s ease-out forwards; 
+}
+
+@keyframes swing-in {
+  0% { 
+    opacity: 0; 
+    transform: perspective(1000px) rotateX(-15deg) translateY(30px); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: perspective(1000px) rotateX(0deg) translateY(0); 
+  }
+}
+.animate-swing { 
+  animation: swing-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
+}
